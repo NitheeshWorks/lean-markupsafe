@@ -95,6 +95,15 @@ def properties : List Property :=
       match (Markup.mk "{}").format [FormatArg.ofString s] with
       | .ok m => m == escape s
       | .error _ => false,
+    prop "% with a mapping: the last binding of a repeated key wins, as a Python dict" fun s =>
+      match (Markup.mk "%(k)s|%(j)s").mod
+          (.mapping [("k", .ofString "x"), ("j", .ofString s), ("k", .ofString s)]) with
+      | .ok m => m.str == (escape s).str ++ "|" ++ (escape s).str
+      | .error _ => false,
+    prop "format keywords: the first binding of a repeated key wins" fun s =>
+      match (Markup.mk "{k}").formatWith [] [("k", .ofString s), ("k", .ofString "x")] with
+      | .ok m => m == escape s
+      | .error _ => false,
     prop "% of an escaped template with a string argument is escaped" fun s =>
       match (escape s ++ Markup.mk " %s").mod (.tuple [.ofString s]) with
       | .ok m => decide (IsEscaped m.str)

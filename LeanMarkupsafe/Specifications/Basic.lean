@@ -284,10 +284,12 @@ def modTupleInterpolates : Prop :=
   ∀ (t : Markup) (xs : List FormatArg) (r : Markup),
     t.mod (.tuple xs) = .ok r → InterpolatesAll PercentSeg xs t r
 
-/-- `mod_mapping_interpolates`: the same for `%` with a mapping. -/
+/-- `mod_mapping_interpolates`: the same for `%` with a mapping. The
+mapping is a Python `dict`, so the last binding of a repeated key wins:
+`%(k)s` refers to `kv.reverse.lookup k`. -/
 def modMappingInterpolates : Prop :=
   ∀ (t : Markup) (kv : List (String × FormatArg)) (r : Markup),
-    t.mod (.mapping kv) = .ok r → Interpolates PercentSeg [] kv t r
+    t.mod (.mapping kv) = .ok r → Interpolates PercentSeg [] kv.reverse t r
 
 /-- A string argument renders as its escape under `%s` and `{}`, and as the
 escape of its `int()` value under `%d`. -/

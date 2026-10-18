@@ -42,8 +42,16 @@ The fast `str.format` and `%` engines look positional arguments up in an
 `Array` and keyword arguments in a `Std.HashMap`, both built once per call
 (`renderFieldA`, proved equal to `renderField` on `pos.toArray` and
 `namedMap named`). `namedMap` inserts with `insertIfNew`, so the first
-binding of a repeated key wins, exactly as `List.lookup` in the
-specification (`namedMap_get`). A million `{}`, `{0}`, `{name}` or
+binding of a repeated keyword wins, exactly as `List.lookup` in the
+specification (`namedMap_get`). A `%` mapping is a Python `dict`, where the
+last binding of a repeated key wins (`Markup("%(a)s") % {"a": 1, "a": 2}`
+is `2`): `Markup.mod` specifies it as `List.lookup` on `kv.reverse`, and
+`dictMap` inserts with `insert`, so the last binding wins
+(`dictMap_get : (dictMap kv)[a]? = kv.reverse.lookup a`). The two differ
+because Python cannot repeat a keyword argument (`f(a=1, a=2)` is a
+`SyntaxError`), so `format` keywords have no upstream answer and keep the
+first binding; a dict display or `dict(pairs)` can repeat a key and keeps
+the last. A million `{}`, `{0}`, `{name}` or
 `%(name)s` fields are linear. `%d` of text counts
 the literal's digits with the in-place `int()` grammar (`pyIntDigitCount`,
 the `intStep` fold) before it stores any, so a 20 MB literal over CPython's
@@ -119,7 +127,8 @@ be a Hoare triple over a heap.
   `format_closed`, `mod_closed`, `argsSafe_proof`.
 * `VerifiedStripTags`: `striptags_no_tags`, `removeTags_no_lt`, `striptags_eq`.
 * `VerifiedInterpolation`: `formatWith_interpolates`, `mod_tuple_interpolates`,
-  `mod_mapping_interpolates` (for any template, trusted HTML included: the
+  `mod_mapping_interpolates` (the mapping looked up as `kv.reverse`, so the
+  last binding of a repeated key wins, as a Python `dict`) (for any template, trusted HTML included: the
   output is the template's segments with literals copied, `{{`/`}}`/`%%`
   unquoted, and the `i`-th field replaced by the rendering of the argument
   `fieldRefs` assigns it: automatic fields take positions 0, 1, ... in

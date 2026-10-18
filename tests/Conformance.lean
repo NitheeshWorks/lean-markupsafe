@@ -150,6 +150,21 @@ def cases : List Case :=
       (match API.formatStrings (Markup.mk "<em>{}</em>") ["<bad user>"] with
        | .ok r => r.val.str == "<em>&lt;bad user&gt;</em>"
        | .error _ => false),
+    -- A Python dict keeps the last binding of a repeated key; outputs from
+    -- MarkupSafe 3.0.4 (upstream-spec/.venv/bin/python -I).
+    check "src/markupsafe/__init__.py::Markup.__mod__ (dict with a repeated key)"
+      "mapping_repeated_key_last_wins"
+      (okStr ((Markup.mk "%(a)s").mod (.mapping [("a", .ofString "first"), ("a", .ofString "second")]))
+         "second" &&
+       okStr ((Markup.mk "<em>%(a)s|%(b)s|%(a)s</em>").mod
+         (.mapping [("a", .ofString "<x>"), ("b", .ofString "&"), ("a", .ofString "\"y\"")]))
+         "<em>&#34;y&#34;|&amp;|&#34;y&#34;</em>" &&
+       okStr ((Markup.mk "%(a)s %(b)d").mod (.mapping [("a", .ofNat 1), ("b", .ofNat 2),
+           ("b", .ofNat 3), ("a", .ofMarkup (Markup.mk "<i>z</i>"))]))
+         "<i>z</i> 3" &&
+       okStr (Markup.mk "%(k)s" % [("k", FormatArg.ofString "<1>"), ("j", .ofNat 0),
+           ("k", .ofMarkup (Markup.mk "<b>2</b>"))])
+         "<b>2</b>"),
     check "src/markupsafe/__init__.py::Markup.__mod__" "positional_with_mapping"
       (isErr ((Markup.mk "%s").mod (.mapping [("a", .ofNat 1)]))),
     check "src/markupsafe/__init__.py::Markup (docstring)" "percent_plain_values"

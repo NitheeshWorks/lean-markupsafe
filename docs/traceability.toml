@@ -125,6 +125,16 @@ theorem = ["LeanMarkupsafe.mod_closed"]
 test = ["tests/Conformance.lean::tuple_interpol", "tests/Conformance.lean::dict_interpol", "tests/Conformance.lean::missing_interpol", "tests/Conformance.lean::interpolation"]
 
 [[requirement]]
+id = "mod.mapping-repeated-key"
+upstream = "src/markupsafe/__init__.py::Markup.__mod__ (dict with a repeated key)"
+title = "% with a mapping keeps the last binding of a repeated key, as a Python dict; format keywords keep the first"
+status = "implemented"
+realises = ["LeanMarkupsafe.Markup.mod", "LeanMarkupsafe.dictMap", "LeanMarkupsafe.namedMap"]
+theorem = ["LeanMarkupsafe.mod_mapping_interpolates", "LeanMarkupsafe.dictMap_get", "LeanMarkupsafe.namedMap_get"]
+test = ["tests/Conformance.lean::mapping_repeated_key_last_wins", "tests/Props.lean", "tests/Bench.lean"]
+note = "MarkupSafe 3.0.4: Markup('%(a)s') % {'a': 'first', 'a': 'second'} is 'second'. The mapping is looked up as kv.reverse. Python cannot repeat a keyword argument (SyntaxError), so format keywords have no upstream answer and keep the first binding."
+
+[[requirement]]
 id = "format.deviation.access"
 upstream = "tests/test_markupsafe.py::test_format"
 title = "attribute/index access in format fields ({0[1][bar]}), !r conversions and nested specs"
@@ -316,7 +326,7 @@ id = "execution.in-place"
 upstream = "src/markupsafe/_speedups.c (escape in one pass); Python str methods"
 title = "escape, unescape, striptags, split, format, %, join and * run in place: constant stack, linear time and memory, proved equal to the specifications"
 status = "implemented"
-realises = ["LeanMarkupsafe.escapeFast", "LeanMarkupsafe.unescapeFast", "LeanMarkupsafe.Markup.striptagsFast", "LeanMarkupsafe.Markup.splitFast", "LeanMarkupsafe.Markup.formatWithFast", "LeanMarkupsafe.Markup.modFast", "LeanMarkupsafe.Markup.joinMarkupFast", "LeanMarkupsafe.Markup.timesFast", "LeanMarkupsafe.pyDigitsFast", "LeanMarkupsafe.pyIntLiteralFast", "LeanMarkupsafe.percentIntOfTextFast", "LeanMarkupsafe.pyIntDigitCount", "LeanMarkupsafe.renderFieldA", "LeanMarkupsafe.namedMap", "LeanMarkupsafe.Cursor.rest"]
-theorem = ["LeanMarkupsafe.escape_eq_fast", "LeanMarkupsafe.unescape_eq_fast", "LeanMarkupsafe.Markup.striptags_eq_fast", "LeanMarkupsafe.Markup.split_eq_fast", "LeanMarkupsafe.Markup.formatWith_eq_fast", "LeanMarkupsafe.Markup.mod_eq_fast", "LeanMarkupsafe.Markup.joinMarkup_eq_fast", "LeanMarkupsafe.Markup.times_eq_fast", "LeanMarkupsafe.pyDigits_eq_fast", "LeanMarkupsafe.pyIntLiteral_eq_fast", "LeanMarkupsafe.percentIntOfText_eq_fast", "LeanMarkupsafe.renderFieldA_toArray", "LeanMarkupsafe.namedMap_get", "LeanMarkupsafe.theVerifiedExecution"]
+realises = ["LeanMarkupsafe.escapeFast", "LeanMarkupsafe.unescapeFast", "LeanMarkupsafe.Markup.striptagsFast", "LeanMarkupsafe.Markup.splitFast", "LeanMarkupsafe.Markup.formatWithFast", "LeanMarkupsafe.Markup.modFast", "LeanMarkupsafe.Markup.joinMarkupFast", "LeanMarkupsafe.Markup.timesFast", "LeanMarkupsafe.pyDigitsFast", "LeanMarkupsafe.pyIntLiteralFast", "LeanMarkupsafe.percentIntOfTextFast", "LeanMarkupsafe.pyIntDigitCount", "LeanMarkupsafe.renderFieldA", "LeanMarkupsafe.namedMap", "LeanMarkupsafe.dictMap", "LeanMarkupsafe.Cursor.rest"]
+theorem = ["LeanMarkupsafe.escape_eq_fast", "LeanMarkupsafe.unescape_eq_fast", "LeanMarkupsafe.Markup.striptags_eq_fast", "LeanMarkupsafe.Markup.split_eq_fast", "LeanMarkupsafe.Markup.formatWith_eq_fast", "LeanMarkupsafe.Markup.mod_eq_fast", "LeanMarkupsafe.Markup.joinMarkup_eq_fast", "LeanMarkupsafe.Markup.times_eq_fast", "LeanMarkupsafe.pyDigits_eq_fast", "LeanMarkupsafe.pyIntLiteral_eq_fast", "LeanMarkupsafe.percentIntOfText_eq_fast", "LeanMarkupsafe.renderFieldA_toArray", "LeanMarkupsafe.namedMap_get", "LeanMarkupsafe.dictMap_get", "LeanMarkupsafe.theVerifiedExecution"]
 test = ["tests/Bench.lean"]
 note = "Each specification is stated on List Char; the @[csimp] lemma makes the compiler run the in-place version. lake exe bench: 20 MB inputs, each within 2 s and 300 MB peak memory."

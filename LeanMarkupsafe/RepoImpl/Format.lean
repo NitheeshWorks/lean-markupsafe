@@ -670,6 +670,29 @@ theorem namedMap_fold (l : List (String × FormatArg)) (m : Std.HashMap String F
 theorem namedMap_get (named : List (String × FormatArg)) (a : String) : (namedMap named)[a]? = named.lookup a := by
   rw [namedMap, namedMap_fold, Std.HashMap.getElem?_emptyWithCapacity]; simp
 
+/-- A `%` mapping as a hash map, built once per call. A Python `dict` keeps
+the last binding of a repeated key, so this inserts with `insert` and the
+last binding wins, as `List.lookup` on the reversed list (the
+specification, `dictMap_get`). -/
+def dictMap (kv : List (String × FormatArg)) : Std.HashMap String FormatArg :=
+  kv.foldl (fun m p => m.insert p.1 p.2) (Std.HashMap.emptyWithCapacity kv.length)
+
+theorem dictMap_fold (l : List (String × FormatArg)) (m : Std.HashMap String FormatArg) (a : String) :
+    (l.foldl (fun m p => m.insert p.1 p.2) m)[a]? = (l.reverse.lookup a).or (m[a]?) := by
+  induction l generalizing m with
+  | nil => simp
+  | cons p l ih =>
+    rw [List.foldl_cons, ih, Std.HashMap.getElem?_insert, List.reverse_cons, List.lookup_append]
+    simp only [List.lookup]
+    by_cases hk : p.1 = a
+    · subst hk; simp
+    · have : (a == p.1) = false := by simp; exact fun h => hk h.symm
+      simp [hk, this]
+
+theorem dictMap_get (kv : List (String × FormatArg)) (a : String) :
+    (dictMap kv)[a]? = kv.reverse.lookup a := by
+  rw [dictMap, dictMap_fold, Std.HashMap.getElem?_emptyWithCapacity]; simp
+
 /-- `ArgRef.lookup` with the positional arguments in an `Array` and the
 keyword arguments in a hash map: constant time per field. -/
 def ArgRef.lookupA (pos : Array FormatArg) (named : Std.HashMap String FormatArg) :
@@ -1080,7 +1103,7 @@ safe (upstream `Markup.__mod__`). -/
 def Markup.mod (t : Markup) (args : PercentArgs) : Except FormatError Markup :=
   let r := match args with
     | .tuple xs => percentList none xs t.str.toList
-    | .mapping kv => percentList (some kv) [] t.str.toList
+    | .mapping kv => percentList (some kv.reverse) [] t.str.toList
   match r with
   | .ok o => .ok ⟨String.ofList o⟩
   | .error e => .error e
@@ -1374,25 +1397,27 @@ decreasing_by
     omega
   · exact rest_next_length p h
 
-theorem percGo_eq (map : Option (List (String × FormatArg))) (rem : List FormatArg) (p : s.Pos)
-    (acc : String) :
-    (percGo (map.map namedMap) rem p acc).map String.toList =
+/-- `percGo` over a hash map `M` that answers every key as `List.lookup` on
+`map` does is `percentList` over `map`. -/
+theorem percGo_eq (M : Option (Std.HashMap String FormatArg)) (map : Option (List (String × FormatArg)))
+    (hM : M.map (fun M k => M[k]?) = map.map fun kv k => kv.lookup k) (rem : List FormatArg)
+    (p : s.Pos) (acc : String) :
+    (percGo M rem p acc).map String.toList =
       (percentList map rem (rest p)).map (acc.toList ++ ·) := by
   induction p using rest_induction generalizing rem acc with
   | step p ih =>
     rw [percGo]
     split
     · subst_vars; rw [rest_endPos, percentList]
-      cases map <;> by_cases hr : rem = [] <;> simp_all [Except.map]
+      cases M <;> cases map <;> simp at hM <;> by_cases hr : rem = [] <;> simp_all [Except.map]
     · rename_i h
       have hlt := rest_next_length p h
       rw [rest_next p h]
       by_cases hc : p.get h = '%'
       · rw [hc, percentList_pct]
         simp only [ite_true]
-        have he := percStep_eq (map.map namedMap) rem (p.next h)
-        rw [show (map.map namedMap).map (fun M k => M[k]?) = map.map fun kv k => kv.lookup k by
-          cases map <;> simp [namedMap_get]] at he
+        have he := percStep_eq M rem (p.next h)
+        rw [hM] at he
         split
         · rename_i e hs
           rw [hs] at he; simp only [Except.map] at he; rw [← he]; rfl
@@ -1415,16 +1440,18 @@ end Cursor
 def Markup.modFast (t : Markup) (args : PercentArgs) : Except FormatError Markup :=
   let r := match args with
     | .tuple xs => Cursor.percGo none xs t.str.toSlice.startPos ""
-    | .mapping kv => Cursor.percGo (some (namedMap kv)) [] t.str.toSlice.startPos ""
+    | .mapping kv => Cursor.percGo (some (dictMap kv)) [] t.str.toSlice.startPos ""
   match r with
   | .ok o => .ok ⟨o⟩
   | .error e => .error e
 
-theorem percGo_start (map : Option (List (String × FormatArg))) (rem : List FormatArg)
+theorem percGo_start (M : Option (Std.HashMap String FormatArg))
+    (map : Option (List (String × FormatArg)))
+    (hM : M.map (fun M k => M[k]?) = map.map fun kv k => kv.lookup k) (rem : List FormatArg)
     (t : String) :
-    (Cursor.percGo (map.map namedMap) rem t.toSlice.startPos "").map String.toList =
+    (Cursor.percGo M rem t.toSlice.startPos "").map String.toList =
       percentList map rem t.toList := by
-  have he := Cursor.percGo_eq map rem t.toSlice.startPos ""
+  have he := Cursor.percGo_eq M map hM rem t.toSlice.startPos ""
   rw [Cursor.rest_startPos] at he
   simp only [String.toList_empty, List.nil_append, String.copy_toSlice] at he
   rw [he]; cases percentList map rem t.toList <;> rfl
@@ -1440,8 +1467,10 @@ theorem percGo_start (map : Option (List (String × FormatArg))) (rem : List For
     intro x y h
     cases x <;> cases y <;> simp [Except.map] at h <;> simp [← h]
   cases args with
-  | tuple xs => exact key _ _ (percGo_start none xs t.str)
-  | mapping kv => exact key _ _ (percGo_start (some kv) [] t.str)
+  | tuple xs => exact key _ _ (percGo_start none none rfl xs t.str)
+  | mapping kv =>
+    exact key _ _ (percGo_start (some (dictMap kv)) (some kv.reverse)
+      (by simp only [Option.map_some, dictMap_get]) [] t.str)
 
 /-- The arguments of `%` and `format`, written as upstream writes them: a
 single value (a one-element tuple), a list or a tuple of values (positional

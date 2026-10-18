@@ -141,9 +141,10 @@ def modStrings (t : Markup) (ss : List String) :
     Except FormatError {r : Markup // InterpolatesAll PercentSeg (ss.map .ofString) t r} :=
   modTrusted t (ss.map .ofString)
 
-/-- `%` with a mapping on a trusted template. -/
+/-- `%` with a mapping on a trusted template. As a Python `dict`, the last
+binding of a repeated key wins (`kv.reverse`). -/
 def modMappingTrusted (t : Markup) (kv : List (String × FormatArg)) :
-    Except FormatError {r : Markup // Interpolates PercentSeg [] kv t r} :=
+    Except FormatError {r : Markup // Interpolates PercentSeg [] kv.reverse t r} :=
   match h : t.mod (.mapping kv) with
   | .ok r => .ok ⟨r, mod_mapping_interpolates t kv r h⟩
   | .error e => .error e

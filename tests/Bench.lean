@@ -99,6 +99,11 @@ def benches : List Bench := [
     kwargs := fun _ => (List.range 1000000).map fun i => (s!"k{i}", FormatArg.ofString "<"),
     run := fun s kw => ofExcept ((Markup.mk s).mod (.mapping kw)),
     ok := fun _ r => r.length == 4000000 },
+  { name := "% with a mapping, one key given a million times (the last wins)",
+    input := fun _ => rep 1000000 "%(k)s",
+    kwargs := fun _ => List.replicate 999999 ("k", FormatArg.ofString "x") ++ [("k", FormatArg.ofString "<")],
+    run := fun s kw => ofExcept ((Markup.mk s).mod (.mapping kw)),
+    ok := fun _ r => r.length == 4000000 && r.startsWith "&lt;&lt;" },
   { name := "%d of a 20 MB digit string (over the int() limit)", input := (rep · "7"),
     run := fun s _ => match Markup.mk "%d" % s with
       | .ok m => .error s!"accepted: {m.str.length} chars"

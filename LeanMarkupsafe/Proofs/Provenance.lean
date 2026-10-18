@@ -345,7 +345,8 @@ theorem mod_mapping_interpolates : Spec.modMappingInterpolates := by
   · rename_i o ho
     cases h
     obtain ⟨segs, ms, hwf, hp, hf, rfl, -⟩ :=
-      percentList_interpolates (some kv) [] kv (by intro k h; cases h; rfl) _ _ (Nat.le_refl _)
+      percentList_interpolates (some kv.reverse) [] kv.reverse (by intro k h; cases h; rfl) _ _
+        (Nat.le_refl _)
         0 [] o (by simp) ho
     exact ⟨segs, ms, hwf, hp, hf, by simp⟩
   · cases h
@@ -489,7 +490,7 @@ theorem mod_closed : Spec.modClosed := by
   · obtain ⟨segs, ms, hwf, hp, hf, hr⟩ := mod_mapping_interpolates _ _ _ h
     show Esc r.str.toList
     rw [hr]
-    exact fill_escaped (fun s hs => (hwf s hs).delimited) (fills_escaped (by simp) hkv hf) (hp ▸ ht)
+    exact fill_escaped (fun s hs => (hwf s hs).delimited) (fills_escaped (by simp) (fun p hp => hkv p (List.mem_reverse.mp hp)) hf) (hp ▸ ht)
 
 /-! ## The same, for `format` -/
 
