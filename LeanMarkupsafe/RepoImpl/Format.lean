@@ -72,6 +72,329 @@ def pyIntLiteral (s : String) : Option (Bool × List Char) :=
   | '+' :: r => (pyDigits r).map (false, ·)
   | r => (pyDigits r).map (false, ·)
 
+/-! ### `int()` literals in one pass
+
+`pyIntLiteral` strips the string through `List Char`. `intStep` is the same
+grammar as a six-state machine folded over the string in place;
+`pyIntLiteral_eq_fast` proves the fold equal, and `percentIntOfText` counts
+the digits with the same fold before it builds anything, so a literal over
+the limit is rejected after one scan. -/
+
+theorem digit_not_space {x : Char} (h : isDecDigit x = true) : isPySpace x = false := by
+  unfold isDecDigit at h
+  simp only [Bool.and_eq_true, decide_eq_true_eq] at h
+  have h1 : 48 ≤ x.toNat := h.1
+  have h2 : x.toNat ≤ 57 := h.2
+  unfold isPySpace
+  simp only [Bool.or_eq_false_iff, Bool.and_eq_false_iff, decide_eq_false_iff_not,
+    beq_eq_false_iff_ne]
+  omega
+
+/-- Strip trailing Python whitespace. -/
+def rstripPy (l : List Char) : List Char := (l.reverse.dropWhile isPySpace).reverse
+
+theorem rstripPy_nil : rstripPy [] = [] := rfl
+
+theorem rstripPy_cons (y : Char) (t : List Char) :
+    rstripPy (y :: t) = if rstripPy t = [] ∧ isPySpace y = true then [] else y :: rstripPy t := by
+  unfold rstripPy
+  rw [List.reverse_cons, List.dropWhile_append]
+  by_cases h : (t.reverse.dropWhile isPySpace).isEmpty = true
+  · have h' : t.reverse.dropWhile isPySpace = [] := List.isEmpty_iff.mp h
+    rw [ite_eq_left h, h']
+    by_cases hy : isPySpace y = true <;> simp [hy, List.dropWhile]
+  · rw [ite_eq_right h]
+    have hne : (t.reverse.dropWhile isPySpace).reverse ≠ [] := by simpa [List.isEmpty_iff] using h
+    simp [hne]
+
+theorem rstripPy_cons_of_not {y : Char} (t : List Char) (h : isPySpace y = false) :
+    rstripPy (y :: t) = y :: rstripPy t := by
+  rw [rstripPy_cons]; simp [h]
+
+/-- Trailing whitespace only: accepted, with no more digits. -/
+def intRunT : List Char → Option (List Char)
+  | [] => some []
+  | x :: t => if isPySpace x then intRunT t else none
+
+/-- After a digit: the digits still to come, if the rest is well formed. -/
+def intRunD : List Char → Option (List Char)
+  | [] => some []
+  | x :: t =>
+    if isDecDigit x then (intRunD t).map (x :: ·)
+    else if x = '_' then
+      match t with
+      | y :: t' => if isDecDigit y then (intRunD t').map (y :: ·) else none
+      | [] => none
+    else if isPySpace x then intRunT t
+    else none
+
+theorem intRunD_cons (x : Char) (t : List Char) :
+    intRunD (x :: t) =
+      if isDecDigit x then (intRunD t).map (x :: ·)
+      else if x = '_' then
+        match t with
+        | y :: t' => if isDecDigit y then (intRunD t').map (y :: ·) else none
+        | [] => none
+      else if isPySpace x then intRunT t
+      else none := by
+  cases t <;> rfl
+
+/-- After a sign: a digit must come. -/
+def intRunS : List Char → Option (List Char)
+  | x :: t => if isDecDigit x then (intRunD t).map (x :: ·) else none
+  | [] => none
+
+/-- `pyIntLiteral` on a character list, left to right. -/
+def intRunL : List Char → Option (Bool × List Char)
+  | [] => none
+  | x :: t =>
+    if isPySpace x then intRunL t
+    else if x = '-' then (intRunS t).map (true, ·)
+    else if x = '+' then (intRunS t).map (false, ·)
+    else if isDecDigit x then (intRunD t).map fun d => (false, x :: d)
+    else none
+
+theorem intRunT_eq (t : List Char) : intRunT t = if rstripPy t = [] then some [] else none := by
+  induction t with
+  | nil => rfl
+  | cons x t ih =>
+    rw [intRunT, rstripPy_cons]
+    by_cases hx : isPySpace x = true
+    · rw [ite_eq_left hx, ih]; by_cases hr : rstripPy t = [] <;> simp [hr, hx]
+    · simp [hx]
+
+theorem pyDigits_cons_nondigit {x : Char} (R : List Char) (h : isDecDigit x = false) :
+    pyDigits (x :: R) = none := by
+  cases R <;> simp [pyDigits, h]
+
+theorem pyDigits_rstrip (n : Nat) : ∀ (t : List Char) (c : Char), t.length ≤ n →
+    isDecDigit c = true → pyDigits (c :: rstripPy t) = (intRunD t).map (c :: ·) := by
+  induction n with
+  | zero =>
+    intro t c ht hc
+    cases t with
+    | nil => simp [rstripPy_nil, pyDigits, hc, intRunD]
+    | cons => simp at ht
+  | succ n ih =>
+    intro t c ht hc
+    cases t with
+    | nil => simp [rstripPy_nil, pyDigits, hc, intRunD]
+    | cons x t =>
+      simp only [List.length_cons] at ht
+      rw [intRunD_cons]
+      by_cases hx : isDecDigit x = true
+      · rw [rstripPy_cons_of_not t (digit_not_space hx), ite_eq_left hx]
+        have hne : x ≠ '_' := by rintro rfl; simp [isDecDigit] at hx
+        simp only [pyDigits, hc, ite_true, hne, ite_false]
+        rw [ih t x (by omega) hx]
+      · rw [ite_eq_right hx]
+        by_cases hu : x = '_'
+        · subst hu
+          rw [rstripPy_cons_of_not t (by decide), ite_eq_left rfl]
+          simp only [pyDigits, hc, ite_true]
+          cases t with
+          | nil => simp [rstripPy_nil]
+          | cons y t' =>
+            simp only [List.length_cons] at ht
+            by_cases hy : isDecDigit y = true
+            · rw [rstripPy_cons_of_not t' (digit_not_space hy)]
+              simp only [hy, ite_true]
+              rw [ih t' y (by omega) hy]
+            · rw [rstripPy_cons]
+              have hy' : isDecDigit y = false := by simpa using hy
+              by_cases hr : rstripPy t' = [] ∧ isPySpace y = true
+              · rw [ite_eq_left hr]; simp [hy']
+              · rw [ite_eq_right hr]; simp [hy']
+        · rw [ite_eq_right hu]
+          have hx' : isDecDigit x = false := by simpa using hx
+          by_cases hs : isPySpace x = true
+          · rw [ite_eq_left hs, intRunT_eq, rstripPy_cons]
+            by_cases hr : rstripPy t = []
+            · simp [hr, hs, pyDigits, hc]
+            · simp only [hr, false_and, ite_false]
+              simp [pyDigits, hc, hu, pyDigits_cons_nondigit _ hx']
+          · rw [ite_eq_right hs, rstripPy_cons_of_not t (by simpa using hs)]
+            simp [pyDigits, hc, hu, pyDigits_cons_nondigit _ hx']
+
+theorem intRunS_eq (t : List Char) : intRunS t = pyDigits (rstripPy t) := by
+  cases t with
+  | nil => rfl
+  | cons x t =>
+    rw [intRunS]
+    by_cases hx : isDecDigit x = true
+    · rw [ite_eq_left hx, rstripPy_cons_of_not t (digit_not_space hx),
+        pyDigits_rstrip _ t x (Nat.le_refl _) hx]
+    · have hx' : isDecDigit x = false := by simpa using hx
+      rw [ite_eq_right hx, rstripPy_cons]
+      split
+      · rfl
+      · rw [pyDigits_cons_nondigit _ hx']
+
+theorem intRunL_eq (l : List Char) :
+    intRunL l = match rstripPy (l.dropWhile isPySpace) with
+      | '-' :: r => (pyDigits r).map (true, ·)
+      | '+' :: r => (pyDigits r).map (false, ·)
+      | r => (pyDigits r).map (false, ·) := by
+  induction l with
+  | nil => rfl
+  | cons x t ih =>
+    rw [intRunL]
+    by_cases hs : isPySpace x = true
+    · rw [ite_eq_left hs, ih, List.dropWhile_cons_of_pos hs]
+    · have hs' : isPySpace x = false := by simpa using hs
+      rw [ite_eq_right hs, List.dropWhile_cons_of_neg hs, rstripPy_cons_of_not t hs']
+      by_cases hm : x = '-'
+      · subst hm; simp [intRunS_eq]
+      · by_cases hp : x = '+'
+        · subst hp; simp [intRunS_eq]
+        · rw [ite_eq_right hm, ite_eq_right hp]
+          have key : (match x :: rstripPy t with
+              | '-' :: r => (pyDigits r).map (true, ·)
+              | '+' :: r => (pyDigits r).map (false, ·)
+              | r => (pyDigits r).map (false, ·)) = (pyDigits (x :: rstripPy t)).map (false, ·) := by
+            split
+            · rename_i r h; simp at h; exact absurd h.1 hm
+            · rename_i r h; simp at h; exact absurd h.1 hp
+            · rfl
+          rw [key]
+          by_cases hd : isDecDigit x = true
+          · rw [ite_eq_left hd, pyDigits_rstrip _ t x (Nat.le_refl _) hd]
+            cases intRunD t <;> rfl
+          · rw [ite_eq_right hd, pyDigits_cons_nondigit _ (by simpa using hd)]; rfl
+
+theorem pyIntLiteral_eq_run (s : String) : pyIntLiteral s = intRunL s.toList := by
+  rw [intRunL_eq]; rfl
+
+/-- Where the literal grammar stands after a prefix of the string. -/
+inductive IntPhase where
+  | lead | sign | digit | under | trail | bad
+  deriving DecidableEq
+
+/-- One character of the grammar: the phase, the sign, and what `emit` has
+made of the digits so far. -/
+def intStep {β : Type} (emit : β → Char → β) (st : IntPhase × Bool × β) (c : Char) :
+    IntPhase × Bool × β :=
+  match st.1 with
+  | .lead =>
+    if isPySpace c then st
+    else if c = '-' then (.sign, true, st.2.2)
+    else if c = '+' then (.sign, false, st.2.2)
+    else if isDecDigit c then (.digit, false, emit st.2.2 c)
+    else (.bad, st.2)
+  | .sign => if isDecDigit c then (.digit, st.2.1, emit st.2.2 c) else (.bad, st.2)
+  | .digit =>
+    if isDecDigit c then (.digit, st.2.1, emit st.2.2 c)
+    else if c = '_' then (.under, st.2)
+    else if isPySpace c then (.trail, st.2)
+    else (.bad, st.2)
+  | .under => if isDecDigit c then (.digit, st.2.1, emit st.2.2 c) else (.bad, st.2)
+  | .trail => if isPySpace c then st else (.bad, st.2)
+  | .bad => st
+
+/-- The sign and the digits' image, if the string ended in an accepting
+phase. -/
+def intFinish {β : Type} (st : IntPhase × Bool × β) : Option (Bool × β) :=
+  match st.1 with
+  | .digit | .trail => some st.2
+  | _ => none
+
+section
+variable {β : Type} (emit : β → Char → β)
+
+theorem fold_bad (t : List Char) (neg : Bool) (b : β) :
+    intFinish (t.foldl (intStep emit) (.bad, neg, b)) = none := by
+  induction t with
+  | nil => rfl
+  | cons x t ih => simp only [List.foldl_cons, intStep]; exact ih
+
+theorem fold_trail (t : List Char) (neg : Bool) (b : β) :
+    intFinish (t.foldl (intStep emit) (.trail, neg, b)) =
+      (intRunT t).map fun e => (neg, e.foldl emit b) := by
+  induction t with
+  | nil => rfl
+  | cons x t ih =>
+    simp only [List.foldl_cons, intStep, intRunT]
+    by_cases hx : isPySpace x = true
+    · simp only [hx, ite_true]; exact ih
+    · simp only [hx, Bool.false_eq_true, ite_false]; exact fold_bad emit t neg b
+
+theorem fold_digit (t : List Char) :
+    (∀ neg b, intFinish (t.foldl (intStep emit) (.digit, neg, b)) =
+      (intRunD t).map fun e => (neg, e.foldl emit b)) ∧
+    (∀ neg b, intFinish (t.foldl (intStep emit) (.under, neg, b)) =
+      (match t with
+       | y :: t' => if isDecDigit y then (intRunD t').map (y :: ·) else none
+       | [] => none).map fun (e : List Char) => (neg, e.foldl emit b)) := by
+  induction t with
+  | nil => exact ⟨fun _ _ => rfl, fun _ _ => rfl⟩
+  | cons x t ih =>
+    refine ⟨fun neg b => ?_, fun neg b => ?_⟩
+    · simp only [List.foldl_cons, intStep, intRunD_cons]
+      by_cases hd : isDecDigit x = true
+      · simp only [hd, ite_true]; rw [ih.1]; cases intRunD t <;> rfl
+      · simp only [hd, Bool.false_eq_true, ite_false]
+        by_cases hu : x = '_'
+        · simp only [hu, ite_true]; exact ih.2 neg b
+        · simp only [hu, ite_false]
+          by_cases hs : isPySpace x = true
+          · simp only [hs, ite_true]; exact fold_trail emit t neg b
+          · simp only [hs, Bool.false_eq_true, ite_false]; exact fold_bad emit t neg b
+    · simp only [List.foldl_cons, intStep]
+      by_cases hd : isDecDigit x = true
+      · simp only [hd, ite_true]; rw [ih.1]; cases intRunD t <;> rfl
+      · simp only [hd, Bool.false_eq_true, ite_false]; exact fold_bad emit t neg b
+
+theorem fold_lead (l : List Char) (neg : Bool) (b : β) :
+    intFinish (l.foldl (intStep emit) (.lead, neg, b)) =
+      (intRunL l).map fun p => (p.1, p.2.foldl emit b) := by
+  induction l generalizing neg with
+  | nil => rfl
+  | cons x t ih =>
+    simp only [List.foldl_cons, intStep, intRunL]
+    have sign : ∀ n, intFinish (t.foldl (intStep emit) (.sign, n, b)) =
+        ((intRunS t).map (n, ·)).map fun p => (p.1, p.2.foldl emit b) := by
+      intro n
+      cases t with
+      | nil => rfl
+      | cons y t' =>
+        simp only [List.foldl_cons, intStep, intRunS]
+        by_cases hy : isDecDigit y = true
+        · simp only [hy, ite_true]; rw [(fold_digit emit t').1]; cases intRunD t' <;> rfl
+        · simp only [hy, Bool.false_eq_true, ite_false]; exact fold_bad emit t' n b
+    by_cases hs : isPySpace x = true
+    · simp only [hs, ite_true]; exact ih neg
+    · simp only [hs, Bool.false_eq_true, ite_false]
+      by_cases hm : x = '-'
+      · simp only [hm, ite_true]; exact sign true
+      · simp only [hm, ite_false]
+        by_cases hp : x = '+'
+        · simp only [hp, ite_true]; exact sign false
+        · simp only [hp, ite_false]
+          by_cases hd : isDecDigit x = true
+          · simp only [hd, ite_true]; rw [(fold_digit emit t).1]; cases intRunD t <;> rfl
+          · simp only [hd, Bool.false_eq_true, ite_false]; exact fold_bad emit t neg b
+
+end
+
+/-- `pyIntLiteral`, in one fold over the string. -/
+def pyIntLiteralFast (s : String) : Option (Bool × List Char) :=
+  (intFinish (s.foldl (intStep fun l c => c :: l) (.lead, false, []))).map fun p => (p.1, p.2.reverse)
+
+/-- The executable `pyIntLiteral` is `pyIntLiteral`. -/
+@[csimp] theorem pyIntLiteral_eq_fast : @pyIntLiteral = @pyIntLiteralFast := by
+  funext s
+  rw [pyIntLiteralFast, String.foldl_eq_foldl_toList, fold_lead, pyIntLiteral_eq_run]
+  cases intRunL s.toList <;> simp
+
+/-- The sign and the number of digits of the literal, in one fold. -/
+def pyIntDigitCount (s : String) : Option (Bool × Nat) :=
+  intFinish (s.foldl (intStep fun n _ => n + 1) (.lead, false, 0))
+
+theorem pyIntDigitCount_eq (s : String) :
+    pyIntDigitCount s = (pyIntLiteral s).map fun p => (p.1, p.2.length) := by
+  rw [pyIntDigitCount, String.foldl_eq_foldl_toList, fold_lead, pyIntLiteral_eq_run]
+  cases intRunL s.toList <;> simp
+
 /-- The integer a sign and digit list stand for. -/
 def pyIntValue (neg : Bool) (d : List Char) : Int :=
   if neg then -(decValue d : Int) else (decValue d : Int)
@@ -84,15 +407,43 @@ def parsePyInt (s : String) : Option Int :=
 (`sys.get_int_max_str_digits()`); a longer literal is a `ValueError`. -/
 def intMaxStrDigits : Nat := 4300
 
+/-- CPython's error for an `int()` literal over the digit limit. -/
+def intLimitError (n : Nat) : FormatError :=
+  .typeError s!"Exceeds the limit ({intMaxStrDigits} digits) for integer string conversion: value has {n} digits; use sys.set_int_max_str_digits() to increase the limit"
+
+/-- CPython's error for a malformed `int()` literal. -/
+def invalidIntError (s : String) : FormatError :=
+  .typeError s!"invalid literal for int() with base 10: '{s}'"
+
 /-- `%d` of a text value: upstream converts the argument with `int()`, which
 rejects a malformed literal and one of more than 4300 digits. -/
 def percentIntOfText (s : String) : Except FormatError Markup :=
   match pyIntLiteral s with
   | some (neg, d) =>
-    if intMaxStrDigits < d.length then
-      .error (.typeError s!"Exceeds the limit ({intMaxStrDigits} digits) for integer string conversion: value has {d.length} digits; use sys.set_int_max_str_digits() to increase the limit")
+    if intMaxStrDigits < d.length then .error (intLimitError d.length)
     else .ok (escape (toString (pyIntValue neg d)))
-  | none => .error (.typeError s!"invalid literal for int() with base 10: '{s}'")
+  | none => .error (invalidIntError s)
+
+/-- `percentIntOfText`, counting the digits in one pass first, so a literal
+over the limit is rejected before any digit is stored. -/
+def percentIntOfTextFast (s : String) : Except FormatError Markup :=
+  match pyIntDigitCount s with
+  | none => .error (invalidIntError s)
+  | some (_, n) => if intMaxStrDigits < n then .error (intLimitError n) else percentIntOfText s
+
+/-- The executable `percentIntOfText` is `percentIntOfText`. -/
+@[csimp] theorem percentIntOfText_eq_fast : @percentIntOfText = @percentIntOfTextFast := by
+  funext s
+  unfold percentIntOfTextFast
+  rw [pyIntDigitCount_eq]
+  cases h : pyIntLiteral s with
+  | none => simp [percentIntOfText, h]
+  | some p =>
+    obtain ⟨neg, d⟩ := p
+    simp only [Option.map_some]
+    by_cases hl : intMaxStrDigits < d.length
+    · simp [percentIntOfText, h, hl]
+    · simp [hl]
 
 namespace FormatArg
 
@@ -298,6 +649,49 @@ def renderField (pos : List FormatArg) (named : List (String × FormatArg))
     | .error e => .error e
     | .ok m => .ok (m, st')
 
+/-- `ArgRef.lookup` with the positional arguments in an `Array`: constant
+time per positional field. -/
+def ArgRef.lookupA (pos : Array FormatArg) (named : List (String × FormatArg)) :
+    ArgRef → Option FormatArg
+  | .pos i => pos[i]?
+  | .key k => named.lookup k
+
+/-- `resolveField` with the positional arguments in an `Array`. -/
+def resolveFieldA (pos : Array FormatArg) (named : List (String × FormatArg))
+    (st : Numbering) (name : List Char) : Except FormatError (FormatArg × Numbering) :=
+  match parseFieldName name with
+  | .error e => .error e
+  | .ok fn =>
+    match st.step fn with
+    | .error e => .error e
+    | .ok st' =>
+      match (fn.ref st.counter).lookupA pos named with
+      | some a => .ok (a, st')
+      | none =>
+        match fn.ref st.counter with
+        | .pos i => .error (.indexOutOfRange i)
+        | .key k => .error (.missingKey k)
+
+/-- `renderField` with the positional arguments in an `Array`. -/
+def renderFieldA (pos : Array FormatArg) (named : List (String × FormatArg))
+    (st : Numbering) (field : List Char) : Except FormatError (Markup × Numbering) :=
+  let nf := splitField field
+  match resolveFieldA pos named st nf.1 with
+  | .error e => .error e
+  | .ok (a, st') =>
+    match a.render (.brace (String.ofList nf.2)) with
+    | .error e => .error e
+    | .ok m => .ok (m, st')
+
+theorem ArgRef.lookupA_toArray (pos : List FormatArg) (named : List (String × FormatArg))
+    (r : ArgRef) : r.lookupA pos.toArray named = r.lookup pos named := by
+  cases r <;> simp [ArgRef.lookupA, ArgRef.lookup]
+
+theorem renderFieldA_toArray (pos : List FormatArg) (named : List (String × FormatArg))
+    (st : Numbering) (field : List Char) :
+    renderFieldA pos.toArray named st field = renderField pos named st field := by
+  simp only [renderFieldA, renderField, resolveFieldA, resolveField, ArgRef.lookupA_toArray]
+
 /-- The `str.format` engine on a character list. -/
 def formatList (pos : List FormatArg) (named : List (String × FormatArg)) :
     Numbering → List Char → Except FormatError (List Char)
@@ -401,7 +795,7 @@ theorem takeFieldAt_eq (p : s.Pos) (accRev : List Char) :
 
 /-- The field whose `{` comes just before `q`: its rendering, the numbering
 after it and the position after its `}`. -/
-def fieldAt (pos : List FormatArg) (named : List (String × FormatArg)) (st : Numbering)
+def fieldAt (pos : Array FormatArg) (named : List (String × FormatArg)) (st : Numbering)
     (q : s.Pos) : Except FormatError (Markup × Numbering × s.Pos) :=
   -- The guard is `takeFieldAt`'s own first case; stated here, it keeps the
   -- elaborator from unfolding `takeFieldAt` when `fmtGo` matches on this.
@@ -410,11 +804,11 @@ def fieldAt (pos : List FormatArg) (named : List (String × FormatArg)) (st : Nu
     match takeFieldAt q [] with
     | .error e => .error e
     | .ok (field, r) =>
-      match renderField pos named st field with
+      match renderFieldA pos named st field with
       | .error e => .error e
       | .ok (m, st') => .ok (m, st', r)
 
-theorem fieldAt_length {pos : List FormatArg} {named : List (String × FormatArg)} {st : Numbering}
+theorem fieldAt_length {pos : Array FormatArg} {named : List (String × FormatArg)} {st : Numbering}
     {q : s.Pos} {m : Markup} {st' : Numbering} {r : s.Pos}
     (h : fieldAt pos named st q = .ok (m, st', r)) : (rest r).length < (rest q).length := by
   unfold fieldAt at h
@@ -437,7 +831,7 @@ theorem fieldAt_length {pos : List FormatArg} {named : List (String × FormatArg
 
 /-- `formatList`, in place: append the rendering of the template text at `p`
 to `acc`. -/
-def fmtGo (pos : List FormatArg) (named : List (String × FormatArg)) (st : Numbering)
+def fmtGo (pos : Array FormatArg) (named : List (String × FormatArg)) (st : Numbering)
     (p : s.Pos) (acc : String) : Except FormatError String :=
   if h : p = s.endPos then .ok acc
   else if p.get h = '{' then
@@ -463,7 +857,7 @@ decreasing_by
 
 theorem fieldAt_eq (pos : List FormatArg) (named : List (String × FormatArg)) (st : Numbering)
     (q : s.Pos) :
-    (fieldAt pos named st q).map (fun x => (x.1, x.2.1, rest x.2.2)) =
+    (fieldAt pos.toArray named st q).map (fun x => (x.1, x.2.1, rest x.2.2)) =
       fieldL pos named st (rest q) := by
   have he := takeFieldAt_eq q []
   unfold fieldAt fieldL
@@ -484,11 +878,12 @@ theorem fieldAt_eq (pos : List FormatArg) (named : List (String × FormatArg)) (
         obtain ⟨x1, x2⟩ := x; obtain ⟨y1, y2⟩ := y
         simp at he; obtain ⟨rfl, rfl⟩ := he
         simp only
+        rw [renderFieldA_toArray]
         cases renderField pos named st x1 <;> simp [Except.map]
 
 theorem fmtGo_eq (pos : List FormatArg) (named : List (String × FormatArg)) (st : Numbering)
     (p : s.Pos) (acc : String) :
-    (fmtGo pos named st p acc).map String.toList =
+    (fmtGo pos.toArray named st p acc).map String.toList =
       (formatList pos named st (rest p)).map (acc.toList ++ ·) := by
   induction p using rest_induction generalizing st acc with
   | step p ih =>
@@ -500,7 +895,7 @@ theorem fmtGo_eq (pos : List FormatArg) (named : List (String × FormatArg)) (st
       have hadv : (rest (adv (p.next h))).length < (rest p).length := by
         rw [rest_adv, List.length_tail]; omega
       have tailCase : ∀ (c : Char) (st : Numbering),
-          (fmtGo pos named st (adv (p.next h)) (acc.push c)).map String.toList =
+          (fmtGo pos.toArray named st (adv (p.next h)) (acc.push c)).map String.toList =
             (mapOk (c :: ·) (formatList pos named st (rest (p.next h)).tail)).map
               (acc.toList ++ ·) := by
         intro c st
@@ -542,7 +937,7 @@ end Cursor
 /-- `formatWith`, reading the template in place. -/
 def Markup.formatWithFast (t : Markup) (pos : List FormatArg)
     (named : List (String × FormatArg) := []) : Except FormatError Markup :=
-  match Cursor.fmtGo pos named .unset t.str.toSlice.startPos "" with
+  match Cursor.fmtGo pos.toArray named .unset t.str.toSlice.startPos "" with
   | .ok o => .ok ⟨o⟩
   | .error e => .error e
 
@@ -556,12 +951,12 @@ def Markup.formatWithFast (t : Markup) (pos : List FormatArg)
   cases h1 : formatList pos named .unset t.str.toList with
   | error e =>
     rw [h1] at he
-    cases h2 : Cursor.fmtGo pos named .unset t.str.toSlice.startPos "" with
+    cases h2 : Cursor.fmtGo pos.toArray named .unset t.str.toSlice.startPos "" with
     | error e' => rw [h2] at he; simp [Except.map] at he; simp [he]
     | ok o => rw [h2] at he; simp [Except.map] at he
   | ok o =>
     rw [h1] at he
-    cases h2 : Cursor.fmtGo pos named .unset t.str.toSlice.startPos "" with
+    cases h2 : Cursor.fmtGo pos.toArray named .unset t.str.toSlice.startPos "" with
     | error e' => rw [h2] at he; simp [Except.map] at he
     | ok o' =>
       rw [h2] at he; simp [Except.map] at he

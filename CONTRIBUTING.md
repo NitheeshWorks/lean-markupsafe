@@ -22,8 +22,8 @@ to bytes:
 ### Specified on lists, run in place
 
 Every operation that walks its input (`escape`, `unescape`, `striptags`,
-`split`, `formatWith`/`format`, `%`, `join`, `*`, and the digit check of
-`%d`) is *specified* by a function on `List Char` that recurses once per
+`split`, `formatWith`/`format`, `%`, `join`, `*`, and the `int()` literal
+grammar of `%d`) is *specified* by a function on `List Char` that recurses once per
 character: the right shape for proofs, and the shape every theorem is stated
 about. Run as written, that would cost a stack frame and about 24 bytes per
 character, and a 24 MB string overflowed the stack. So each has an
@@ -38,10 +38,23 @@ executable twin that reads its input in place and builds a `String`:
   recursive. Numeric character references saturate just above U+10FFFF, so a
   reference with millions of digits is still linear.
 
+The fast `str.format` engine looks positional arguments up in an `Array`
+(`renderFieldA`, proved equal to `renderField` on `pos.toArray`), so a
+template of a million `{}` or `{0}` fields is linear. `%d` of text counts
+the literal's digits with the in-place `int()` grammar (`pyIntDigitCount`,
+the `intStep` fold) before it stores any, so a 20 MB literal over CPython's
+4300-digit limit is rejected after one scan.
+
+`split` returns one `Markup` per word, about 80 bytes each: linear, but a
+24 MB string of eight million words peaks near 660 MB. That is inherent in
+returning a list (upstream returns a Python list of `Markup` too), so the
+bench runs it on 5 MB.
+
 Each twin is proved equal to its specification by an `@[csimp]` lemma
 (`escape_eq_fast`, `unescape_eq_fast`, `Markup.striptags_eq_fast`,
 `Markup.split_eq_fast`, `Markup.formatWith_eq_fast`, `Markup.mod_eq_fast`,
-`Markup.joinMarkup_eq_fast`, `Markup.times_eq_fast`, `pyDigits_eq_fast`;
+`Markup.joinMarkup_eq_fast`, `Markup.times_eq_fast`, `pyDigits_eq_fast`,
+`pyIntLiteral_eq_fast`, `percentIntOfText_eq_fast`;
 bundled in `VerifiedExecution`), which makes the compiler run the twin
 wherever the specification is called, in this package and in every package
 that depends on it. A `@[csimp]` lemma only redirects code compiled after

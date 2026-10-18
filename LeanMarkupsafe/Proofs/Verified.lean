@@ -145,6 +145,10 @@ structure VerifiedExecution where
   times : Spec.timesRunsInPlace
   /-- `pyDigits_eq_fast`. -/
   pyDigits : Spec.pyDigitsRunsInPlace
+  /-- `pyIntLiteral_eq_fast`. -/
+  pyIntLiteral : Spec.pyIntLiteralRunsInPlace
+  /-- `percentIntOfText_eq_fast`. -/
+  percentIntOfText : Spec.percentIntOfTextRunsInPlace
 
 theorem theVerifiedExecution : VerifiedExecution where
   escape := escape_eq_fast
@@ -156,5 +160,7 @@ theorem theVerifiedExecution : VerifiedExecution where
   join := Markup.joinMarkup_eq_fast
   times := Markup.times_eq_fast
   pyDigits := pyDigits_eq_fast
+  pyIntLiteral := pyIntLiteral_eq_fast
+  percentIntOfText := percentIntOfText_eq_fast
 
 end LeanMarkupsafe

@@ -69,6 +69,18 @@ def benches : List Bench := [
   { name := "% (Markup.mod), a 20 MB template", input := (fill · "lorem %s ipsum %%\n"),
     run := fun s => ofExcept (Markup.mk s % ((List.replicate (s.length / 18) "<"))),
     ok := fun s r => r.length == s.length + (s.length / 18) * 1 },
+  { name := "Markup.formatWith, a million {} fields and a million arguments",
+    input := fun _ => rep 1000000 "{}",
+    run := fun s => ofExcept ((Markup.mk s).formatWith (List.replicate 1000000 "<")),
+    ok := fun _ r => r.length == 4000000 },
+  { name := "Markup.formatWith, a million {0} fields", input := fun _ => rep 1000000 "{0}",
+    run := fun s => ofExcept ((Markup.mk s).formatWith ["<"]),
+    ok := fun _ r => r.length == 4000000 },
+  { name := "%d of a 20 MB digit string (over the int() limit)", input := (rep · "7"),
+    run := fun s => match Markup.mk "%d" % s with
+      | .ok m => .error s!"accepted: {m.str.length} chars"
+      | .error e => .ok (toString e),
+    ok := fun s r => r == toString (intLimitError s.length) },
   { name := "join, a million items", input := fun _ => "",
     run := fun _ => .ok (Markup.join (Markup.mk ", ") ((List.range 1000000).map fun i =>
       if i % 2 == 0 then "<a>" else "b")).str,
@@ -78,9 +90,10 @@ def benches : List Bench := [
     ok := fun _ r => r.length == 4000000 },
   { name := "unescape, a reference of 10 MB of digits", input := fun n => "&#" ++ rep (n / 2) "9" ++ ";",
     run := fun s => .ok (unescape s), ok := fun _ r => r == "\uFFFD" },
-  -- Last: two million words cost about 80 bytes each as a list of markups,
+  -- Last: a word costs about 80 bytes as a list of markups (24 MB, eight
+  -- million words, peaks near 660 MB),
   -- and the allocator keeps that memory for any case after this one.
-  { name := "split, 10 MB (two million words)", input := fun n => fill (n / 2) textUnit,
+  { name := "split, 5 MB (a million words)", input := fun n => fill (n / 4) textUnit,
     run := fun s => .ok (toString (Markup.mk s).split.length),
     ok := fun s r => r == toString ((s.length / textUnit.length) * 11) } ]
 

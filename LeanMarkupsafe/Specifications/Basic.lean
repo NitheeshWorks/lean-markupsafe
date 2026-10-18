@@ -387,6 +387,13 @@ def timesRunsInPlace : Prop := @Markup.times = @Markup.timesFast
 /-- `%d`'s digit check runs as `pyDigitsFast` (an accumulator). -/
 def pyDigitsRunsInPlace : Prop := @pyDigits = @pyDigitsFast
 
+/-- The `int()` literal grammar runs as `pyIntLiteralFast` (one fold). -/
+def pyIntLiteralRunsInPlace : Prop := @pyIntLiteral = @pyIntLiteralFast
+
+/-- `%d` of text runs as `percentIntOfTextFast`: the digits are counted in
+one pass before any is stored. -/
+def percentIntOfTextRunsInPlace : Prop := @percentIntOfText = @percentIntOfTextFast
+
 end Spec
 
 end LeanMarkupsafe
