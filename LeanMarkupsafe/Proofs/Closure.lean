@@ -65,7 +65,9 @@ theorem percentIntOfText_ok {s : String} {m : Markup} (h : percentIntOfText s = 
     ∃ i : Int, m = escape (toString i) := by
   unfold percentIntOfText at h
   split at h
-  · cases h; exact ⟨_, rfl⟩
+  · split at h
+    · cases h
+    · cases h; exact ⟨_, rfl⟩
   · cases h
 
 theorem argsSafe_proof : Spec.argsSafe := by

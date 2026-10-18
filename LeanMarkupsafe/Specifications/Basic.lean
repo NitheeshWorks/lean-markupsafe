@@ -353,6 +353,40 @@ def formatKeywords : Prop :=
       Forall₂ (fun rc s => rc.1.lookupStr [] kv = some s) (fieldRefs segs) args ∧
       r.str = String.ofList (fillSegs segs (args.map escape))
 
+/-! ## Execution: what runs is what is specified
+
+Each operation that walks its input is specified on `List Char` and runs as
+an in-place implementation (constant stack, linear time and memory). These
+say the two are the same function; as `@[csimp]` lemmas they also make the
+compiler run the in-place one. -/
+
+/-- `escape` runs as `escapeFast` (one `String.foldl`). -/
+def escapeRunsInPlace : Prop := @escape = @escapeFast
+
+/-- `unescape` runs as `unescapeFast` (a cursor over the string). -/
+def unescapeRunsInPlace : Prop := @unescape = @unescapeFast
+
+/-- `striptags` runs as `striptagsFast` (each pass in place). -/
+def striptagsRunsInPlace : Prop := @Markup.striptags = @Markup.striptagsFast
+
+/-- `split` runs as `splitFast` (one fold). -/
+def splitRunsInPlace : Prop := @Markup.split = @Markup.splitFast
+
+/-- `formatWith` (and so `format`) runs as `formatWithFast`. -/
+def formatWithRunsInPlace : Prop := @Markup.formatWith = @Markup.formatWithFast
+
+/-- `%` runs as `modFast`. -/
+def modRunsInPlace : Prop := @Markup.mod = @Markup.modFast
+
+/-- `join` runs through `joinMarkupFast` (one left fold). -/
+def joinRunsInPlace : Prop := @Markup.joinMarkup = @Markup.joinMarkupFast
+
+/-- `times` runs as `timesFast` (a loop). -/
+def timesRunsInPlace : Prop := @Markup.times = @Markup.timesFast
+
+/-- `%d`'s digit check runs as `pyDigitsFast` (an accumulator). -/
+def pyDigitsRunsInPlace : Prop := @pyDigits = @pyDigitsFast
+
 end Spec
 
 end LeanMarkupsafe

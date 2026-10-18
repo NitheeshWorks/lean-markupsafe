@@ -360,7 +360,10 @@ theorem string_arg_rendering : Spec.stringArgRendering := by
     refine ⟨fun h => absurd rfl h, fun _ => ?_⟩
     simp only [FormatArg.ofString, percentIntOfText] at h
     split at h
-    · rename_i i hi; cases h; exact ⟨i, hi, rfl⟩
+    · rename_i neg d hi
+      split at h
+      · cases h
+      · cases h; exact ⟨_, by simp [parsePyInt, hi], rfl⟩
     · cases h
   | brace spec =>
     simp only [FormatArg.ofString] at h

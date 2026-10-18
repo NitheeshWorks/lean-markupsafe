@@ -1,6 +1,6 @@
 name = "LeanMarkupsafe"
 version = "0.1.0"
-defaultTargets = ["LeanMarkupsafe", "Examples", "props", "conformance"]
+defaultTargets = ["LeanMarkupsafe", "Examples", "props", "conformance", "bench"]
 
 # The verified library. Everything under LeanMarkupsafe/ except Transport.lean is a
 # total function and the proof surface; see CONTRIBUTING.md.
@@ -19,6 +19,13 @@ root = "tests.Props"
 [[lean_exe]]
 name = "conformance"
 root = "tests.Conformance"
+
+# Big inputs: escape, unescape, striptags, format and % on about 20 MB, each
+# within 2 s and 300 MB peak memory: `lake exe bench`, run through
+# stack-tools/capped.
+[[lean_exe]]
+name = "bench"
+root = "tests.Bench"
 
 # Ports of MarkupSafe's own examples: the code blocks of its README and docs
 # pages (see examples/MANIFEST.toml). tests/Conformance.lean checks every value

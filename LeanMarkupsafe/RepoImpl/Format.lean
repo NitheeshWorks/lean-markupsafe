@@ -36,20 +36,62 @@ def pyDigits : List Char → Option (List Char)
       else (pyDigits (d :: l)).map (c :: ·)
     else none
 
-/-- Python `int(s)` for a string: surrounding whitespace stripped, an
-optional sign, ASCII decimal digits with single underscores between them.
-(Python also accepts non-ASCII decimal digits; this port does not.) -/
-def parsePyInt (s : String) : Option Int :=
+/-- `pyDigits` with an accumulator (the digits so far, reversed): constant
+stack. -/
+def pyDigitsGo : List Char → List Char → Option (List Char)
+  | [], _ => none
+  | [c], acc => if isDecDigit c then some (c :: acc).reverse else none
+  | c :: d :: l, acc =>
+    if isDecDigit c then
+      if d = '_' then
+        match l with
+        | e :: _ => if isDecDigit e then pyDigitsGo l (c :: acc) else none
+        | [] => none
+      else pyDigitsGo (d :: l) (c :: acc)
+    else none
+
+theorem pyDigitsGo_eq (l acc : List Char) :
+    pyDigitsGo l acc = (pyDigits l).map (acc.reverse ++ ·) := by
+  induction l using pyDigits.induct generalizing acc <;> simp_all [pyDigitsGo, pyDigits] <;> rfl
+
+/-- `pyDigits`, with constant stack. -/
+def pyDigitsFast (l : List Char) : Option (List Char) := pyDigitsGo l []
+
+/-- The executable `pyDigits` is `pyDigits`. -/
+@[csimp] theorem pyDigits_eq_fast : @pyDigits = @pyDigitsFast := by
+  funext l; rw [pyDigitsFast, pyDigitsGo_eq]; simp
+
+/-- Python's `int(s)` grammar for a string: surrounding whitespace stripped,
+an optional sign, ASCII decimal digits with single underscores between them.
+The sign (`true` for `-`) and the digits, if well formed. (Python also
+accepts non-ASCII decimal digits; this port does not.) -/
+def pyIntLiteral (s : String) : Option (Bool × List Char) :=
   let l := (s.toList.dropWhile isPySpace).reverse.dropWhile isPySpace |>.reverse
   match l with
-  | '-' :: r => (pyDigits r).map fun d => -(decValue d : Int)
-  | '+' :: r => (pyDigits r).map fun d => (decValue d : Int)
-  | r => (pyDigits r).map fun d => (decValue d : Int)
+  | '-' :: r => (pyDigits r).map (true, ·)
+  | '+' :: r => (pyDigits r).map (false, ·)
+  | r => (pyDigits r).map (false, ·)
 
-/-- `%d` of a text value: upstream converts the argument with `int()`. -/
+/-- The integer a sign and digit list stand for. -/
+def pyIntValue (neg : Bool) (d : List Char) : Int :=
+  if neg then -(decValue d : Int) else (decValue d : Int)
+
+/-- Python `int(s)` for a string (see `pyIntLiteral`). -/
+def parsePyInt (s : String) : Option Int :=
+  (pyIntLiteral s).map fun p => pyIntValue p.1 p.2
+
+/-- CPython's default limit on the digits `int()` converts from a string
+(`sys.get_int_max_str_digits()`); a longer literal is a `ValueError`. -/
+def intMaxStrDigits : Nat := 4300
+
+/-- `%d` of a text value: upstream converts the argument with `int()`, which
+rejects a malformed literal and one of more than 4300 digits. -/
 def percentIntOfText (s : String) : Except FormatError Markup :=
-  match parsePyInt s with
-  | some i => .ok (escape (toString i))
+  match pyIntLiteral s with
+  | some (neg, d) =>
+    if intMaxStrDigits < d.length then
+      .error (.typeError s!"Exceeds the limit ({intMaxStrDigits} digits) for integer string conversion: value has {d.length} digits; use sys.set_int_max_str_digits() to increase the limit")
+    else .ok (escape (toString (pyIntValue neg d)))
   | none => .error (.typeError s!"invalid literal for int() with base 10: '{s}'")
 
 namespace FormatArg
@@ -286,6 +328,246 @@ def Markup.formatWith (t : Markup) (pos : List FormatArg)
   | .ok o => .ok ⟨String.ofList o⟩
   | .error e => .error e
 
+/-! ### The executable `str.format` engine
+
+`formatList` recurses once per template character and builds a `List Char`.
+`fmtGo` reads the template in place through a `Cursor` and appends each
+literal character and each rendered field to a `String`, with constant
+stack; `formatWith_eq_fast` (`@[csimp]`) proves it equal. -/
+
+/-- A field after its `{`: its rendering, the numbering after it and the
+text after its `}`. -/
+def fieldL (pos : List FormatArg) (named : List (String × FormatArg)) (st : Numbering)
+    (l : List Char) : Except FormatError (Markup × Numbering × List Char) :=
+  match takeField l with
+  | .error e => .error e
+  | .ok (field, r) =>
+    match renderField pos named st field with
+    | .error e => .error e
+    | .ok (m, st') => .ok (m, st', r)
+
+theorem formatList_lbrace (pos : List FormatArg) (named : List (String × FormatArg))
+    (st : Numbering) (l : List Char) :
+    formatList pos named st ('{' :: l) =
+      if l.head? = some '{' then mapOk ('{' :: ·) (formatList pos named st l.tail)
+      else match fieldL pos named st l with
+        | .error e => .error e
+        | .ok (m, st', r) => mapOk (m.str.toList ++ ·) (formatList pos named st' r) := by
+  rw [formatList]
+  simp only [ite_true]
+  split
+  · rfl
+  · unfold fieldL
+    split
+    · rename_i e h; simp [h]
+    · rename_i field r h
+      simp only [h]
+      cases renderField pos named st field <;> rfl
+
+theorem mapOk_ok (f : List Char → List Char) (o : List Char) : mapOk f (.ok o) = .ok (f o) := rfl
+theorem mapOk_error (f : List Char → List Char) (e : FormatError) :
+    mapOk f (.error e) = .error e := rfl
+
+namespace Cursor
+
+variable {s : String.Slice}
+
+/-- `takeField`, in place: the field (its characters in `accRev`, reversed,
+so far) and the position after its `}`. -/
+def takeFieldAt (p : s.Pos) (accRev : List Char) : Except FormatError (List Char × s.Pos) :=
+  if h : p = s.endPos then .error (.badTemplate "expected '}' before end of string")
+  else if p.get h = '}' then .ok (accRev.reverse, p.next h)
+  else if p.get h = '{' then .error (.unsupported "nested replacement fields in a format spec")
+  else takeFieldAt (p.next h) (p.get h :: accRev)
+termination_by (rest p).length
+decreasing_by exact rest_next_length p h
+
+theorem takeFieldAt_eq (p : s.Pos) (accRev : List Char) :
+    (takeFieldAt p accRev).map (fun x => (x.1, rest x.2)) =
+      (takeField (rest p)).map (fun x => (accRev.reverse ++ x.1, x.2)) := by
+  induction p using rest_induction generalizing accRev with
+  | step p ih =>
+    rw [takeFieldAt]
+    split
+    · subst_vars; simp [rest_endPos, takeField, Except.map]
+    · rename_i h
+      rw [rest_next p h, takeField]
+      split
+      · simp [Except.map]
+      · split
+        · simp [Except.map]
+        · rw [ih _ (rest_next_length p h)]
+          cases takeField (rest (p.next h)) <;> simp [Except.map]
+
+/-- The field whose `{` comes just before `q`: its rendering, the numbering
+after it and the position after its `}`. -/
+def fieldAt (pos : List FormatArg) (named : List (String × FormatArg)) (st : Numbering)
+    (q : s.Pos) : Except FormatError (Markup × Numbering × s.Pos) :=
+  -- The guard is `takeFieldAt`'s own first case; stated here, it keeps the
+  -- elaborator from unfolding `takeFieldAt` when `fmtGo` matches on this.
+  if q = s.endPos then .error (.badTemplate "expected '}' before end of string")
+  else
+    match takeFieldAt q [] with
+    | .error e => .error e
+    | .ok (field, r) =>
+      match renderField pos named st field with
+      | .error e => .error e
+      | .ok (m, st') => .ok (m, st', r)
+
+theorem fieldAt_length {pos : List FormatArg} {named : List (String × FormatArg)} {st : Numbering}
+    {q : s.Pos} {m : Markup} {st' : Numbering} {r : s.Pos}
+    (h : fieldAt pos named st q = .ok (m, st', r)) : (rest r).length < (rest q).length := by
+  unfold fieldAt at h
+  have he := takeFieldAt_eq q []
+  split at h
+  · cases h
+  split at h
+  · cases h
+  · rename_i field r' hf
+    split at h
+    · cases h
+    · cases h
+      rw [hf] at he
+      cases ht : takeField (rest q) with
+      | error e => rw [ht] at he; simp [Except.map] at he
+      | ok x =>
+        rw [ht] at he; simp [Except.map] at he
+        have := takeField_length ht
+        rw [he.2]; exact this
+
+/-- `formatList`, in place: append the rendering of the template text at `p`
+to `acc`. -/
+def fmtGo (pos : List FormatArg) (named : List (String × FormatArg)) (st : Numbering)
+    (p : s.Pos) (acc : String) : Except FormatError String :=
+  if h : p = s.endPos then .ok acc
+  else if p.get h = '{' then
+    if peek (p.next h) = some '{' then fmtGo pos named st (adv (p.next h)) (acc.push '{')
+    else
+      match _hf : fieldAt pos named st (p.next h) with
+      | .error e => .error e
+      | .ok (m, st', r) => fmtGo pos named st' r (acc ++ m.str)
+  else if p.get h = '}' then
+    if peek (p.next h) = some '}' then fmtGo pos named st (adv (p.next h)) (acc.push '}')
+    else .error (.badTemplate "Single '}' encountered in format string")
+  else fmtGo pos named st (p.next h) (acc.push (p.get h))
+termination_by (rest p).length
+decreasing_by
+  · have := rest_next_length p h
+    rw [rest_adv, List.length_tail]; omega
+  · have := fieldAt_length _hf
+    have := rest_next_length p h
+    omega
+  · have := rest_next_length p h
+    rw [rest_adv, List.length_tail]; omega
+  · exact rest_next_length p h
+
+theorem fieldAt_eq (pos : List FormatArg) (named : List (String × FormatArg)) (st : Numbering)
+    (q : s.Pos) :
+    (fieldAt pos named st q).map (fun x => (x.1, x.2.1, rest x.2.2)) =
+      fieldL pos named st (rest q) := by
+  have he := takeFieldAt_eq q []
+  unfold fieldAt fieldL
+  split
+  · subst_vars; simp [rest_endPos, takeField, Except.map]
+  · cases ht : takeFieldAt q [] with
+    | error e =>
+      rw [ht] at he
+      cases ht' : takeField (rest q) with
+      | error e' => rw [ht'] at he; simp [Except.map] at he; simp [he, Except.map]
+      | ok x => rw [ht'] at he; simp [Except.map] at he
+    | ok x =>
+      rw [ht] at he
+      cases ht' : takeField (rest q) with
+      | error e' => rw [ht'] at he; simp [Except.map] at he
+      | ok y =>
+        rw [ht'] at he; simp [Except.map] at he
+        obtain ⟨x1, x2⟩ := x; obtain ⟨y1, y2⟩ := y
+        simp at he; obtain ⟨rfl, rfl⟩ := he
+        simp only
+        cases renderField pos named st x1 <;> simp [Except.map]
+
+theorem fmtGo_eq (pos : List FormatArg) (named : List (String × FormatArg)) (st : Numbering)
+    (p : s.Pos) (acc : String) :
+    (fmtGo pos named st p acc).map String.toList =
+      (formatList pos named st (rest p)).map (acc.toList ++ ·) := by
+  induction p using rest_induction generalizing st acc with
+  | step p ih =>
+    rw [fmtGo]
+    split
+    · subst_vars; simp [rest_endPos, formatList, Except.map]
+    · rename_i h
+      have hlt := rest_next_length p h
+      have hadv : (rest (adv (p.next h))).length < (rest p).length := by
+        rw [rest_adv, List.length_tail]; omega
+      have tailCase : ∀ (c : Char) (st : Numbering),
+          (fmtGo pos named st (adv (p.next h)) (acc.push c)).map String.toList =
+            (mapOk (c :: ·) (formatList pos named st (rest (p.next h)).tail)).map
+              (acc.toList ++ ·) := by
+        intro c st
+        rw [ih _ hadv, rest_adv]
+        cases formatList pos named st (rest (p.next h)).tail <;>
+          simp [Except.map, mapOk, String.toList_push]
+      rw [rest_next p h, peek_eq]
+      by_cases hc : p.get h = '{'
+      · rw [hc, formatList_lbrace]
+        simp only [ite_true]
+        by_cases hb : (rest (p.next h)).head? = some '{'
+        · simp only [hb, ite_true]; exact tailCase '{' st
+        · simp only [hb, ite_false]
+          have he := fieldAt_eq pos named st (p.next h)
+          split
+          · rename_i e hf
+            rw [hf] at he; simp only [Except.map] at he; rw [← he]; rfl
+          · rename_i m st' r hf
+            rw [hf] at he; simp only [Except.map] at he; rw [← he]
+            simp only
+            have := fieldAt_length hf
+            rw [ih _ (by omega)]
+            cases formatList pos named st' (rest r) <;>
+              simp [Except.map, mapOk, String.toList_append]
+      · by_cases hc' : p.get h = '}'
+        · rw [hc', formatList]
+          simp only [ite_true, show ('}' : Char) ≠ '{' by decide, ite_false]
+          by_cases hb : (rest (p.next h)).head? = some '}'
+          · simp only [hb, ite_true]; exact tailCase '}' st
+          · simp only [hb, ite_false]; rfl
+        · rw [formatList]
+          simp only [hc, hc', ite_false]
+          rw [ih _ hlt]
+          cases formatList pos named st (rest (p.next h)) <;>
+            simp [Except.map, mapOk, String.toList_push]
+
+end Cursor
+
+/-- `formatWith`, reading the template in place. -/
+def Markup.formatWithFast (t : Markup) (pos : List FormatArg)
+    (named : List (String × FormatArg) := []) : Except FormatError Markup :=
+  match Cursor.fmtGo pos named .unset t.str.toSlice.startPos "" with
+  | .ok o => .ok ⟨o⟩
+  | .error e => .error e
+
+/-- The executable `formatWith` is `formatWith`. -/
+@[csimp] theorem Markup.formatWith_eq_fast : @Markup.formatWith = @Markup.formatWithFast := by
+  funext t pos named
+  unfold Markup.formatWith Markup.formatWithFast
+  have he := Cursor.fmtGo_eq pos named .unset t.str.toSlice.startPos ""
+  rw [Cursor.rest_startPos] at he
+  simp only [String.toList_empty, List.nil_append, String.copy_toSlice] at he
+  cases h1 : formatList pos named .unset t.str.toList with
+  | error e =>
+    rw [h1] at he
+    cases h2 : Cursor.fmtGo pos named .unset t.str.toSlice.startPos "" with
+    | error e' => rw [h2] at he; simp [Except.map] at he; simp [he]
+    | ok o => rw [h2] at he; simp [Except.map] at he
+  | ok o =>
+    rw [h1] at he
+    cases h2 : Cursor.fmtGo pos named .unset t.str.toSlice.startPos "" with
+    | error e' => rw [h2] at he; simp [Except.map] at he
+    | ok o' =>
+      rw [h2] at he; simp [Except.map] at he
+      simp only [Except.ok.injEq, Markup.mk.injEq]
+      rw [← he]; simp
+
 /-- Upstream `Markup.format_map`. -/
 def Markup.formatMap (t : Markup) (named : List (String × FormatArg)) :
     Except FormatError Markup :=
@@ -386,6 +668,361 @@ def Markup.mod (t : Markup) (args : PercentArgs) : Except FormatError Markup :=
   match r with
   | .ok o => .ok ⟨String.ofList o⟩
   | .error e => .error e
+
+/-! ### The executable `%` engine
+
+As for `str.format`: `percGo` reads the template in place and appends to a
+`String`; `mod_eq_fast` (`@[csimp]`) proves it equal to `Markup.mod`. -/
+
+/-- One `%` field, given the text after its `%`: the rendering, the
+positional arguments left and the text after the field. -/
+def percStepL (map : Option (List (String × FormatArg))) (rem : List FormatArg) :
+    List Char → Except FormatError (Markup × List FormatArg × List Char)
+  | [] => .error (.badTemplate "incomplete format")
+  | d :: r =>
+    if d = '%' then .ok (⟨"%"⟩, rem, r)
+    else if d = '(' then
+      match takeKey r with
+      | none => .error (.badTemplate "incomplete format key")
+      | some (key, r') =>
+        match r' with
+        | [] => .error (.badTemplate "incomplete format")
+        | cv :: r'' =>
+          match map with
+          | none => .error .requiresMapping
+          | some kv =>
+            match percentConv cv with
+            | .error e => .error e
+            | .ok conv =>
+              match kv.lookup (String.ofList key) with
+              | none => .error (.missingKey (String.ofList key))
+              | some a =>
+                match a.render conv with
+                | .error e => .error e
+                | .ok m => .ok (m, rem, r'')
+    else
+      match percentConv d with
+      | .error e => .error e
+      | .ok conv =>
+        match map with
+        | some _ => .error (.unsupported "a positional % field with mapping arguments")
+        | none =>
+          match rem with
+          | [] => .error .notEnoughArguments
+          | a :: rem' =>
+            match a.render conv with
+            | .error e => .error e
+            | .ok m => .ok (m, rem', r)
+
+theorem percStepL_length {map : Option (List (String × FormatArg))} {rem rem' : List FormatArg}
+    {l r : List Char} {m : Markup} (h : percStepL map rem l = .ok (m, rem', r)) :
+    r.length < l.length := by
+  unfold percStepL at h
+  split at h
+  · cases h
+  · rename_i d r0
+    split at h
+    · cases h; simp
+    · split at h
+      · split at h
+        · cases h
+        · rename_i key r' hk
+          have := takeKey_length hk
+          split at h
+          · cases h
+          · split at h
+            · cases h
+            · split at h
+              · cases h
+              · split at h
+                · cases h
+                · split at h
+                  · cases h
+                  · cases h; simp at this ⊢; omega
+      · split at h
+        · cases h
+        · split at h
+          · cases h
+          · split at h
+            · cases h
+            · split at h
+              · cases h
+              · cases h; simp
+
+theorem percentList_pct (map : Option (List (String × FormatArg))) (rem : List FormatArg)
+    (l : List Char) :
+    percentList map rem ('%' :: l) =
+      match percStepL map rem l with
+      | .error e => .error e
+      | .ok (m, rem', r) => mapOk (m.str.toList ++ ·) (percentList map rem' r) := by
+  rw [percentList.eq_def]
+  simp only [ite_true]
+  match l with
+  | [] => rfl
+  | d :: r =>
+    simp only [percStepL]
+    by_cases h1 : d = '%'
+    · subst h1; simp
+    · simp only [h1, ite_false]
+      by_cases h2 : d = '('
+      · subst h2
+        simp only [ite_true]
+        split
+        · rename_i hk; simp only [hk]
+        · rename_i key r' hk
+          simp only [hk]
+          cases r' with
+          | nil => rfl
+          | cons cv r'' =>
+            simp only
+            cases map with
+            | none => rfl
+            | some kv =>
+              simp only
+              cases percentConv cv with
+              | error e => rfl
+              | ok conv =>
+                simp only
+                cases kv.lookup (String.ofList key) with
+                | none => rfl
+                | some a =>
+                  simp only
+                  cases a.render conv <;> rfl
+      · simp only [h2, ite_false]
+        cases percentConv d with
+        | error e => rfl
+        | ok conv =>
+          simp only
+          cases map with
+          | some _ => rfl
+          | none =>
+            simp only
+            cases rem with
+            | nil => rfl
+            | cons a rem' =>
+              simp only
+              cases a.render conv <;> rfl
+
+namespace Cursor
+
+variable {s : String.Slice}
+
+/-- `takeKey`, in place: the key (its characters in `accRev`, reversed, so
+far) and the position after its `)`. -/
+def takeKeyAt (p : s.Pos) (accRev : List Char) : Option (List Char × s.Pos) :=
+  if h : p = s.endPos then none
+  else if p.get h = ')' then some (accRev.reverse, p.next h)
+  else takeKeyAt (p.next h) (p.get h :: accRev)
+termination_by (rest p).length
+decreasing_by exact rest_next_length p h
+
+theorem takeKeyAt_eq (p : s.Pos) (accRev : List Char) :
+    (takeKeyAt p accRev).map (fun x => (x.1, rest x.2)) =
+      (takeKey (rest p)).map (fun x => (accRev.reverse ++ x.1, x.2)) := by
+  induction p using rest_induction generalizing accRev with
+  | step p ih =>
+    rw [takeKeyAt]
+    split
+    · subst_vars; simp [rest_endPos, takeKey]
+    · rename_i h
+      rw [rest_next p h, takeKey]
+      split
+      · simp
+      · rw [ih _ (rest_next_length p h)]
+        cases takeKey (rest (p.next h)) <;> simp
+
+/-- `percStepL`, in place. -/
+def percStep (map : Option (List (String × FormatArg))) (rem : List FormatArg) (q : s.Pos) :
+    Except FormatError (Markup × List FormatArg × s.Pos) :=
+  if hq : q = s.endPos then .error (.badTemplate "incomplete format")
+  else if q.get hq = '%' then .ok (⟨"%"⟩, rem, q.next hq)
+  else if q.get hq = '(' then
+    match takeKeyAt (q.next hq) [] with
+    | none => .error (.badTemplate "incomplete format key")
+    | some (key, r') =>
+      if hr : r' = s.endPos then .error (.badTemplate "incomplete format")
+      else
+        match map with
+        | none => .error .requiresMapping
+        | some kv =>
+          match percentConv (r'.get hr) with
+          | .error e => .error e
+          | .ok conv =>
+            match kv.lookup (String.ofList key) with
+            | none => .error (.missingKey (String.ofList key))
+            | some a =>
+              match a.render conv with
+              | .error e => .error e
+              | .ok m => .ok (m, rem, r'.next hr)
+  else
+    match percentConv (q.get hq) with
+    | .error e => .error e
+    | .ok conv =>
+      match map with
+      | some _ => .error (.unsupported "a positional % field with mapping arguments")
+      | none =>
+        match rem with
+        | [] => .error .notEnoughArguments
+        | a :: rem' =>
+          match a.render conv with
+          | .error e => .error e
+          | .ok m => .ok (m, rem', q.next hq)
+
+theorem percStep_eq (map : Option (List (String × FormatArg))) (rem : List FormatArg)
+    (q : s.Pos) :
+    (percStep map rem q).map (fun x => (x.1, x.2.1, rest x.2.2)) =
+      percStepL map rem (rest q) := by
+  unfold percStep
+  split
+  · subst_vars; simp [rest_endPos, percStepL, Except.map]
+  · rename_i hq
+    rw [rest_next q hq, percStepL]
+    by_cases h1 : q.get hq = '%'
+    · simp [h1, Except.map]
+    · simp only [h1, ite_false]
+      by_cases h2 : q.get hq = '('
+      · simp only [h2, ite_true]
+        have hk := takeKeyAt_eq (q.next hq) []
+        cases hka : takeKeyAt (q.next hq) [] with
+        | none =>
+          rw [hka] at hk
+          cases hk' : takeKey (rest (q.next hq)) with
+          | none => simp [Except.map]
+          | some _ => rw [hk'] at hk; simp at hk
+        | some kr =>
+          obtain ⟨key, r'⟩ := kr
+          rw [hka] at hk
+          cases hk' : takeKey (rest (q.next hq)) with
+          | none => rw [hk'] at hk; simp at hk
+          | some kr' =>
+            rw [hk'] at hk
+            obtain ⟨key', r''⟩ := kr'
+            simp at hk; obtain ⟨rfl, rfl⟩ := hk
+            simp only
+            split
+            · subst_vars; simp [rest_endPos, Except.map]
+            · rename_i hr
+              rw [rest_next r' hr]
+              simp only
+              cases map with
+              | none => simp [Except.map]
+              | some kv =>
+                simp only
+                cases percentConv (r'.get hr) with
+                | error e => simp [Except.map]
+                | ok conv =>
+                  simp only
+                  cases kv.lookup (String.ofList key) with
+                  | none => simp [Except.map]
+                  | some a =>
+                    simp only
+                    cases a.render conv <;> simp [Except.map]
+      · simp only [h2, ite_false]
+        cases percentConv (q.get hq) with
+        | error e => simp [Except.map]
+        | ok conv =>
+          simp only
+          cases map with
+          | some _ => simp [Except.map]
+          | none =>
+            simp only
+            cases rem with
+            | nil => simp [Except.map]
+            | cons a rem' =>
+              simp only
+              cases a.render conv <;> simp [Except.map]
+
+theorem percStep_length {map : Option (List (String × FormatArg))} {rem rem' : List FormatArg}
+    {q r : s.Pos} {m : Markup} (h : percStep map rem q = .ok (m, rem', r)) :
+    (rest r).length < (rest q).length := by
+  have he := percStep_eq map rem q
+  rw [h] at he; simp only [Except.map] at he
+  exact percStepL_length he.symm
+
+/-- `percentList`, in place: append the rendering of the template text at
+`p` to `acc`. -/
+def percGo (map : Option (List (String × FormatArg))) (rem : List FormatArg) (p : s.Pos)
+    (acc : String) : Except FormatError String :=
+  if h : p = s.endPos then
+    if map.isNone ∧ ¬ rem.isEmpty then .error .notAllConverted else .ok acc
+  else if p.get h = '%' then
+    match _hs : percStep map rem (p.next h) with
+    | .error e => .error e
+    | .ok (m, rem', r) => percGo map rem' r (acc ++ m.str)
+  else percGo map rem (p.next h) (acc.push (p.get h))
+termination_by (rest p).length
+decreasing_by
+  · have := percStep_length _hs
+    have := rest_next_length p h
+    omega
+  · exact rest_next_length p h
+
+theorem percGo_eq (map : Option (List (String × FormatArg))) (rem : List FormatArg) (p : s.Pos)
+    (acc : String) :
+    (percGo map rem p acc).map String.toList =
+      (percentList map rem (rest p)).map (acc.toList ++ ·) := by
+  induction p using rest_induction generalizing rem acc with
+  | step p ih =>
+    rw [percGo]
+    split
+    · subst_vars; rw [rest_endPos, percentList]
+      split <;> simp [Except.map]
+    · rename_i h
+      have hlt := rest_next_length p h
+      rw [rest_next p h]
+      by_cases hc : p.get h = '%'
+      · rw [hc, percentList_pct]
+        simp only [ite_true]
+        have he := percStep_eq map rem (p.next h)
+        split
+        · rename_i e hs
+          rw [hs] at he; simp only [Except.map] at he; rw [← he]; rfl
+        · rename_i m rem' r hs
+          rw [hs] at he; simp only [Except.map] at he; rw [← he]
+          simp only
+          have := percStep_length hs
+          rw [ih _ (by omega)]
+          cases percentList map rem' (rest r) <;>
+            simp [Except.map, mapOk, String.toList_append]
+      · rw [percentList.eq_def]
+        simp only [hc, ite_false]
+        rw [ih _ hlt]
+        cases percentList map rem (rest (p.next h)) <;>
+          simp [Except.map, mapOk, String.toList_push]
+
+end Cursor
+
+/-- `Markup.mod`, reading the template in place. -/
+def Markup.modFast (t : Markup) (args : PercentArgs) : Except FormatError Markup :=
+  let r := match args with
+    | .tuple xs => Cursor.percGo none xs t.str.toSlice.startPos ""
+    | .mapping kv => Cursor.percGo (some kv) [] t.str.toSlice.startPos ""
+  match r with
+  | .ok o => .ok ⟨o⟩
+  | .error e => .error e
+
+theorem percGo_start (map : Option (List (String × FormatArg))) (rem : List FormatArg)
+    (t : String) :
+    (Cursor.percGo map rem t.toSlice.startPos "").map String.toList =
+      percentList map rem t.toList := by
+  have he := Cursor.percGo_eq map rem t.toSlice.startPos ""
+  rw [Cursor.rest_startPos] at he
+  simp only [String.toList_empty, List.nil_append, String.copy_toSlice] at he
+  rw [he]; cases percentList map rem t.toList <;> rfl
+
+/-- The executable `Markup.mod` is `Markup.mod`. -/
+@[csimp] theorem Markup.mod_eq_fast : @Markup.mod = @Markup.modFast := by
+  funext t args
+  unfold Markup.mod Markup.modFast
+  have key : ∀ (x : Except FormatError String) (y : Except FormatError (List Char)),
+      x.map String.toList = y →
+      (match y with | .ok o => Except.ok (Markup.mk (String.ofList o)) | .error e => .error e) =
+        (match x with | .ok o => .ok (Markup.mk o) | .error e => .error e) := by
+    intro x y h
+    cases x <;> cases y <;> simp [Except.map] at h <;> simp [← h]
+  cases args with
+  | tuple xs => exact key _ _ (percGo_start none xs t.str)
+  | mapping kv => exact key _ _ (percGo_start (some kv) [] t.str)
 
 /-- The arguments of `%` and `format`, written as upstream writes them: a
 single value (a one-element tuple), a list or a tuple of values (positional

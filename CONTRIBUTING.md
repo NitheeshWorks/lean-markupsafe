@@ -19,6 +19,45 @@ to bytes:
 | `APIs/` | the public surface, returning refinements | by construction |
 | `Transport.lean` (if present) | the only effectful module | no; tested |
 
+### Specified on lists, run in place
+
+Every operation that walks its input (`escape`, `unescape`, `striptags`,
+`split`, `formatWith`/`format`, `%`, `join`, `*`, and the digit check of
+`%d`) is *specified* by a function on `List Char` that recurses once per
+character: the right shape for proofs, and the shape every theorem is stated
+about. Run as written, that would cost a stack frame and about 24 bytes per
+character, and a 24 MB string overflowed the stack. So each has an
+executable twin that reads its input in place and builds a `String`:
+
+* `escapeFast`, `collapseFast`, `splitFast`, `joinMarkupFast` are folds;
+  `timesFast` and `pyDigitsFast` are accumulator loops;
+* `unescapeFast`, `removeTagsFast`, `formatWithFast` (`fmtGo`) and `modFast`
+  (`percGo`) walk a `Cursor` (`RepoImpl/Cursor.lean`): positions of a
+  `String.Slice`, with `Cursor.rest p` the list the specification sees at
+  `p`, used only in proofs and termination measures. Every walker is tail
+  recursive. Numeric character references saturate just above U+10FFFF, so a
+  reference with millions of digits is still linear.
+
+Each twin is proved equal to its specification by an `@[csimp]` lemma
+(`escape_eq_fast`, `unescape_eq_fast`, `Markup.striptags_eq_fast`,
+`Markup.split_eq_fast`, `Markup.formatWith_eq_fast`, `Markup.mod_eq_fast`,
+`Markup.joinMarkup_eq_fast`, `Markup.times_eq_fast`, `pyDigits_eq_fast`;
+bundled in `VerifiedExecution`), which makes the compiler run the twin
+wherever the specification is called, in this package and in every package
+that depends on it. A `@[csimp]` lemma only redirects code compiled after
+it, so each one sits right after its definition, before any caller. To add
+one: state the twin, prove it equal, mark the lemma `@[csimp]`, add a slot
+and a case to `tests/Bench.lean`.
+
+A cursor function that matches on the result of another well-founded
+function must have a guard the elaborator cannot see through (an
+`if p = s.endPos` first, as in `fieldAt` and `percStep`); otherwise
+elaborating the match unfolds the inner function's fixpoint and times out.
+
+`lake exe bench` (run through `stack-tools/capped`) checks the result: 10 to
+20 MB of input (or a million items) for each operation, each within 2 s and
+300 MB peak resident memory (Linux `VmHWM`).
+
 Everything except the transport module is a pure function. This is
 load-bearing: a round-trip property of a function is an equation that
 `omega` and `simp` attack directly; the same property of a procedure would
@@ -161,6 +200,8 @@ Listed here with the reason, and in `docs/traceability.toml` with
 * `tests/Props.lean`: seeded property tests, no dependencies, under a second.
 * `tests/Conformance.lean`: cases re-expressed from the upstream suite; each
   names the upstream test (`tests/test_x.py::test_y`).
+* `tests/Bench.lean`: big inputs (`lake exe bench`): time and peak-memory
+  bounds for every operation that walks its input.
 * `tests/pbt/`: a separate Lake package, the one place an external dependency
   (`plausible`) is taken.
 

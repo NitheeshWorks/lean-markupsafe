@@ -123,4 +123,38 @@ theorem theVerifiedInterpolation : VerifiedInterpolation where
   formatStrings := format_strings
   formatKeywords := format_keywords
 
+/-- Execution: every operation that walks its input runs in place, and the
+in-place implementation is the specified function (the `@[csimp]` lemmas in
+`RepoImpl/`). -/
+structure VerifiedExecution where
+  /-- `escape_eq_fast`. -/
+  escape : Spec.escapeRunsInPlace
+  /-- `unescape_eq_fast`. -/
+  unescape : Spec.unescapeRunsInPlace
+  /-- `Markup.striptags_eq_fast`. -/
+  striptags : Spec.striptagsRunsInPlace
+  /-- `Markup.split_eq_fast`. -/
+  split : Spec.splitRunsInPlace
+  /-- `Markup.formatWith_eq_fast`. -/
+  formatWith : Spec.formatWithRunsInPlace
+  /-- `Markup.mod_eq_fast`. -/
+  mod : Spec.modRunsInPlace
+  /-- `Markup.joinMarkup_eq_fast`. -/
+  join : Spec.joinRunsInPlace
+  /-- `Markup.times_eq_fast`. -/
+  times : Spec.timesRunsInPlace
+  /-- `pyDigits_eq_fast`. -/
+  pyDigits : Spec.pyDigitsRunsInPlace
+
+theorem theVerifiedExecution : VerifiedExecution where
+  escape := escape_eq_fast
+  unescape := unescape_eq_fast
+  striptags := Markup.striptags_eq_fast
+  split := Markup.split_eq_fast
+  formatWith := Markup.formatWith_eq_fast
+  mod := Markup.mod_eq_fast
+  join := Markup.joinMarkup_eq_fast
+  times := Markup.times_eq_fast
+  pyDigits := pyDigits_eq_fast
+
 end LeanMarkupsafe

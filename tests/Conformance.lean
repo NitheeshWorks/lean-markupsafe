@@ -30,6 +30,12 @@ def okStr (r : Except FormatError Markup) (expect : String) : Bool :=
   | .ok m => m.str == expect
   | .error _ => false
 
+/-- The error's message starts with `pre`. -/
+def errMsg (r : Except FormatError Markup) (pre : String) : Bool :=
+  match r with
+  | .ok _ => false
+  | .error e => (toString e).startsWith pre
+
 def isErr (r : Except FormatError Markup) : Bool :=
   match r with
   | .ok _ => false
@@ -125,6 +131,18 @@ def cases : List Case :=
        okStr ((Markup.mk "%i") % FormatArg.ofString "1_000") "1000" &&
        isErr ((Markup.mk "%d") % FormatArg.ofString "x") &&
        okStr ((Markup.mk "%d") % FormatArg.ofMarkup (Markup.mk "7")) "7"),
+    -- CPython's int() limit: 4300 digits convert, 4301 (leading zeros
+    -- count, underscores and sign do not) raise ValueError.
+    check "src/markupsafe/__init__.py::_MarkupEscapeHelper.__int__ (int max str digits)"
+      "percent_d_digit_limit"
+      (okStr ((Markup.mk "%d") % FormatArg.ofString (String.ofList (List.replicate 4300 '1')))
+          (String.ofList (List.replicate 4300 '1')) &&
+       okStr ((Markup.mk "%d") % FormatArg.ofString
+          (" -" ++ String.join (List.replicate 2150 "1_") ++ "1")) ("-" ++ String.ofList (List.replicate 2151 '1')) &&
+       errMsg ((Markup.mk "%d") % FormatArg.ofString (String.ofList (List.replicate 4301 '0')))
+          "Exceeds the limit (4300 digits) for integer string conversion: value has 4301 digits; use sys.set_int_max_str_digits() to increase the limit" &&
+       errMsg ((Markup.mk "%d") % FormatArg.ofString (String.ofList (List.replicate 4301 '1') ++ "x"))
+          "invalid literal for int() with base 10: '111"),
     check "tests/test_markupsafe.py::test_escape_silent" "escape_none"
       (Markup.escape (none : Option String) == Markup.mk "None" &&
        Markup.escape (some "<") == Markup.mk "&lt;"),

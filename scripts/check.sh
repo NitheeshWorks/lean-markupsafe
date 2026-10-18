@@ -24,6 +24,9 @@ lake exe props
 echo "== conformance =="
 lake exe conformance
 
+echo "== bench (20 MB inputs) =="
+lake exe bench
+
 echo "== examples =="
 if [[ -f ../stack-tools/check-examples.py ]]; then python3 ../stack-tools/check-examples.py .; fi
 

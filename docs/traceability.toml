@@ -230,10 +230,10 @@ id = "mod.percent-d-text"
 upstream = "src/markupsafe/__init__.py::_MarkupEscapeHelper.__int__"
 title = "%d/%i of a string or Markup converts through int()"
 status = "implemented"
-realises = ["LeanMarkupsafe.parsePyInt", "LeanMarkupsafe.percentIntOfText"]
+realises = ["LeanMarkupsafe.parsePyInt", "LeanMarkupsafe.pyIntLiteral", "LeanMarkupsafe.percentIntOfText", "LeanMarkupsafe.intMaxStrDigits"]
 theorem = ["LeanMarkupsafe.percentIntOfText_ok", "LeanMarkupsafe.string_arg_rendering"]
-test = ["tests/Conformance.lean::percent_d_of_text"]
-note = "ASCII digits only; Python also accepts other Unicode decimal digits."
+test = ["tests/Conformance.lean::percent_d_of_text", "tests/Conformance.lean::percent_d_digit_limit"]
+note = "ASCII digits only; Python also accepts other Unicode decimal digits. A literal of more than 4300 digits is rejected, as CPython's int() does by default (sys.get_int_max_str_digits())."
 
 [[requirement]]
 id = "escape.none"
@@ -310,3 +310,13 @@ status = "implemented"
 note = "Where a docs page shows a different output than 3.0.4 prints (UP-043), the ports and checks follow the package."
 realises = ["LeanMarkupsafe.escape", "LeanMarkupsafe.Markup.of", "LeanMarkupsafe.Markup.format", "LeanMarkupsafe.HasHtmlFormat"]
 test = ["examples/MANIFEST.toml", "examples/Readme.lean", "examples/Index.lean", "examples/Escaping.lean", "examples/Html.lean", "examples/Formatting.lean", "tests/Conformance.lean::docs_formatting"]
+
+[[requirement]]
+id = "execution.in-place"
+upstream = "src/markupsafe/_speedups.c (escape in one pass); Python str methods"
+title = "escape, unescape, striptags, split, format, %, join and * run in place: constant stack, linear time and memory, proved equal to the specifications"
+status = "implemented"
+realises = ["LeanMarkupsafe.escapeFast", "LeanMarkupsafe.unescapeFast", "LeanMarkupsafe.Markup.striptagsFast", "LeanMarkupsafe.Markup.splitFast", "LeanMarkupsafe.Markup.formatWithFast", "LeanMarkupsafe.Markup.modFast", "LeanMarkupsafe.Markup.joinMarkupFast", "LeanMarkupsafe.Markup.timesFast", "LeanMarkupsafe.pyDigitsFast", "LeanMarkupsafe.Cursor.rest"]
+theorem = ["LeanMarkupsafe.escape_eq_fast", "LeanMarkupsafe.unescape_eq_fast", "LeanMarkupsafe.Markup.striptags_eq_fast", "LeanMarkupsafe.Markup.split_eq_fast", "LeanMarkupsafe.Markup.formatWith_eq_fast", "LeanMarkupsafe.Markup.mod_eq_fast", "LeanMarkupsafe.Markup.joinMarkup_eq_fast", "LeanMarkupsafe.Markup.times_eq_fast", "LeanMarkupsafe.pyDigits_eq_fast", "LeanMarkupsafe.theVerifiedExecution"]
+test = ["tests/Bench.lean"]
+note = "Each specification is stated on List Char; the @[csimp] lemma makes the compiler run the in-place version. lake exe bench: 20 MB inputs, each within 2 s and 300 MB peak memory."

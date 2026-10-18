@@ -1,4 +1,5 @@
 import LeanMarkupsafe.DataTypes.Basic
+import LeanMarkupsafe.RepoImpl.Cursor
 
 /-!
 # Escaping
@@ -33,6 +34,46 @@ def escapeList : List Char → List Char
 satisfies `IsEscaped` (`escape_sound`) and `unescape` inverts it
 (`unescape_escape`). -/
 def escape (s : String) : Markup := ⟨String.ofList (escapeList s.toList)⟩
+
+/-! ### The executable escape
+
+`escape` is stated on `List Char`, where the proofs are; run as written it
+would cost a stack frame and about 90 bytes per input character.
+`escapeFast` escapes in one `String.foldl` into a `String`, and
+`escape_eq_fast` (`@[csimp]`) makes every compiled `escape` run it. -/
+
+/-- Append the escape of one character. -/
+def escPush (acc : String) (c : Char) : String :=
+  match c with
+  | '&' => acc ++ "&amp;"
+  | '<' => acc ++ "&lt;"
+  | '>' => acc ++ "&gt;"
+  | '"' => acc ++ "&#34;"
+  | '\'' => acc ++ "&#39;"
+  | c => acc.push c
+
+/-- `escape`, in one pass into a `String`. -/
+def escapeFast (s : String) : Markup := ⟨s.foldl escPush ""⟩
+
+theorem escPush_toList (acc : String) (c : Char) :
+    (escPush acc c).toList = acc.toList ++ escapeChar c := by
+  unfold escPush escapeChar
+  split <;> simp_all [String.toList_push]
+
+theorem foldl_escPush (l : List Char) (acc : String) :
+    (l.foldl escPush acc).toList = acc.toList ++ escapeList l := by
+  induction l generalizing acc with
+  | nil => simp [escapeList]
+  | cons c cs ih => rw [List.foldl_cons, ih, escPush_toList]; simp [escapeList]
+
+/-- The executable escape is `escape`. -/
+@[csimp] theorem escape_eq_fast : @escape = @escapeFast := by
+  funext s
+  unfold escape escapeFast
+  congr 1
+  apply String.ext
+  rw [String.foldl_eq_foldl_toList, foldl_escPush, String.toList_ofList]
+  simp
 
 /-- How a value of type `α` becomes `Markup` under upstream's `escape(obj)`:
 a string is escaped, a `HasHtml` value uses its own rendering, anything else
@@ -111,6 +152,33 @@ def joinMarkup (sep : Markup) : List Markup → Markup
   | [m] => m
   | m :: ms => m ++ sep ++ joinMarkup sep ms
 
+/-- `joinMarkup`, as one left fold into a `String` (constant stack). -/
+def joinMarkupFast (sep : Markup) : List Markup → Markup
+  | [] => empty
+  | m :: ms => ⟨ms.foldl (fun acc x => acc ++ sep.str ++ x.str) m.str⟩
+
+theorem foldl_join (sep : Markup) (x : Markup) (xs : List Markup) (a : String) :
+    (x :: xs).foldl (fun acc x => acc ++ sep.str ++ x.str) a =
+      a ++ sep.str ++ (joinMarkup sep (x :: xs)).str := by
+  induction xs generalizing x a with
+  | nil => simp [joinMarkup]
+  | cons y ys ih =>
+    rw [List.foldl_cons, ih]
+    simp [joinMarkup, String.append_assoc]
+
+/-- The executable `joinMarkup` is `joinMarkup`. -/
+@[csimp] theorem joinMarkup_eq_fast : @joinMarkup = @joinMarkupFast := by
+  funext sep ms
+  cases ms with
+  | nil => rfl
+  | cons m ms =>
+    cases ms with
+    | nil => rfl
+    | cons x xs =>
+      show _ = Markup.mk _
+      rw [foldl_join]
+      cases m; simp [joinMarkup]; rfl
+
 /-- Join the items with `sep` between them, escaping every item that is not
 already markup (upstream `Markup.join`). -/
 def join {α : Type u} [ToMarkup α] (sep : Markup) (xs : List α) : Markup :=
@@ -120,6 +188,26 @@ def join {α : Type u} [ToMarkup α] (sep : Markup) (xs : List α) : Markup :=
 def times (m : Markup) : Nat → Markup
   | 0 => empty
   | n + 1 => m ++ times m n
+
+/-- Append `n` copies of `m` to `acc` (constant stack). -/
+def timesGo (m : Markup) : Nat → String → String
+  | 0, acc => acc
+  | n + 1, acc => timesGo m n (acc ++ m.str)
+
+/-- `times`, as a loop into a `String`. -/
+def timesFast (m : Markup) (n : Nat) : Markup := ⟨timesGo m n ""⟩
+
+theorem timesGo_eq (m : Markup) (n : Nat) (acc : String) :
+    timesGo m n acc = acc ++ (times m n).str := by
+  induction n generalizing acc with
+  | zero => simp [timesGo, times]
+  | succ n ih => simp [timesGo, times, ih, String.append_assoc]
+
+/-- The executable `times` is `times`. -/
+@[csimp] theorem times_eq_fast : @times = @timesFast := by
+  funext m n
+  show times m n = ⟨timesGo m n ""⟩
+  rw [timesGo_eq]; simp
 
 end Markup
 

@@ -29,6 +29,8 @@ jobs:
         run: lake exe props
       - name: Conformance
         run: lake exe conformance
+      - name: Big-input bench (20 MB, each <= 2 s and <= 300 MB)
+        run: lake exe bench
       - name: Traceability
         run: python3 scripts/traceability-check.py
 

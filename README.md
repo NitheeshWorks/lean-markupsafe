@@ -97,6 +97,7 @@ All in `LeanMarkupsafe/Proofs/`, bundled in `Proofs/Verified.lean`:
 | `format_strings`, `format_keywords` | with string arguments (`t.format ss`, `t.format [("k", s)]`) every field becomes `escape` of the string it names | `t.format ss = .ok r → ∃ segs args, … ∧ r.str = String.ofList (fillSegs segs (args.map escape))` |
 | `fill_escaped` → `format_closed`, `mod_closed` | an escaped template with safe arguments gives escaped text | `IsEscaped t.str → … → IsEscaped r.str` |
 | `striptags_no_tags` | no complete tag survives tag removal | `NoCompleteTag (removeTags l)` |
+| `escape_eq_fast`, `unescape_eq_fast`, `Markup.formatWith_eq_fast`, … | what runs is what is specified: each in-place implementation (constant stack, linear time) is the list-based specification, and runs in its place via `@[csimp]` | `@escape = @escapeFast` |
 
 What is tested rather than proved, and every deviation from upstream, is in
 [CONTRIBUTING.md](CONTRIBUTING.md#verification) and `docs/traceability.toml`.
@@ -107,6 +108,7 @@ What is tested rather than proved, and every deviation from upstream, is in
 lake build            # library, proofs, and both test executables
 lake exe props        # property tests (seeded; `lake exe props 42`)
 lake exe conformance  # cases re-expressed from the upstream test suite
+lake exe bench        # 20 MB inputs: time and memory bounds
 scripts/check.sh      # the whole CI gate, locally
 ```
 
