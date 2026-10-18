@@ -18,3 +18,10 @@ root = "tests.Props"
 [[lean_exe]]
 name = "conformance"
 root = "tests.Conformance"
+
+# The shared theory library: lawful codecs (Keel.Codec) restate the escape
+# round trips as instances of one codec law.
+[[require]]
+name = "Keel"
+git = "https://github.com/NitheeshWorks/lean-keel"
+rev = "main"

@@ -129,6 +129,15 @@ def cases : List Case :=
        | .error _ => false),
     check "src/markupsafe/__init__.py::Markup.__mod__" "positional_with_mapping"
       (isErr ((Markup.mk "%s").mod (.mapping [("a", .ofNat 1)]))),
+    check "src/markupsafe/__init__.py::Markup (docstring)" "percent_plain_values"
+      (okStr (Markup.mk "<em>%s</em>" % "foo & bar") "<em>foo &amp; bar</em>" &&
+       okStr (Markup.mk "%s" % ["<a>"]) "&lt;a&gt;" &&
+       okStr (Markup.mk "<em>%s:%s</em>" % ("<foo>", "<bar>")) "<em>&lt;foo&gt;:&lt;bar&gt;</em>" &&
+       okStr (Markup.mk "%(k)s" % [("k", "<a>")]) "&lt;a&gt;" &&
+       okStr (Markup.mk "%s:%d" % ("x", (3 : Nat))) "x:3"),
+    check "Keel.Codec (escapeCodec)" "escape_codec_decode"
+      (escapeCodec.decode (escape "a<b & 'c'").str.toList == some ("a<b & 'c'", []) &&
+       escapeCodec.decode "&lt;x&gt;".toList == some ("<x>", [])),
     check "README.md (Examples)" "readme_examples"
       ((escape "<script>alert(document.cookie);</script>").str ==
          "&lt;script&gt;alert(document.cookie);&lt;/script&gt;" &&

@@ -49,10 +49,15 @@ be a Hoare triple over a heap.
 
 `Proofs/Verified.lean` bundles every headline property:
 
-* `VerifiedEscape`: `escape_sound` (output is `IsEscaped`), `unescape_escape`,
+* `VerifiedEscape`: `escape_sound` (output is `IsEscaped`), `unescape_escape`
+  (an instance of the `Keel.Codec` law: `escapeCodec` in `Proofs/Codec.lean`
+  pairs `escapeChar` with a Keel decoder, `Codec.many` lifts it to strings,
+  and `unescape_decode` shows `unescape` is that decoder on escaped text),
   `escape_unescape` (on escaped text), `isEscaped_iff` (escaped text is the
   image of `escape`), `escape_injective`, `escape_markup_id`, `escape_length`
-  (exact formula), `softStr_markup`, `escapeSilent_spec`.
+  (exact formula), `softStr_markup`, `escapeSilent_spec`. `escape_injective`
+  is `Codec.encode_injective`. `escape_unescape` is proved directly: the
+  codec law gives only the decode-after-encode direction.
 * `VerifiedClosure`: `concat_markup_markup`, `concat_escapes`,
   `concat_string_closed`, `join_closed`, `join_markup_closed`,
   `format_closed`, `mod_closed`, `argsSafe_proof`.
@@ -154,7 +159,7 @@ resolve.
 ## Conventions
 
 * Lean 4 `leanprover/lean4:v4.35.0`; no Mathlib; the core library depends only on Lean
-  core and the sibling `lean-*` repos listed in `lakefile.toml`, pinned by
+  core and lean-keel (the shared theory library, `Keel.Codec`), pinned by
   commit in `lake-manifest.json`.
 * Choose the definition that suits the automation over a prettier one with a
   harder proof.

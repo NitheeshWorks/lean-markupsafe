@@ -1,6 +1,16 @@
 {"version": "1.3.0",
  "packagesDir": ".lake/packages",
- "packages": [],
+ "packages":
+ [{"url": "https://github.com/NitheeshWorks/lean-keel",
+   "type": "git",
+   "subDir": null,
+   "scope": "",
+   "rev": "cc412cc8aa279795a317eb269133d3b4eb23d4c0",
+   "name": "Keel",
+   "manifestFile": "lake-manifest.json",
+   "inputRev": "main",
+   "inherited": false,
+   "configFile": "lakefile.toml"}],
  "name": "LeanMarkupsafe",
  "lakeDir": ".lake",
  "fixedToolchain": false}

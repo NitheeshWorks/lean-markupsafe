@@ -386,12 +386,40 @@ def Markup.mod (t : Markup) (args : PercentArgs) : Except FormatError Markup :=
   | .ok o => .ok ⟨String.ofList o⟩
   | .error e => .error e
 
-/-- `t % args` for a tuple of arguments. -/
-instance : HMod Markup (List FormatArg) (Except FormatError Markup) :=
-  ⟨fun t xs => t.mod (.tuple xs)⟩
+/-- What can stand on the right of `%`, as in upstream: a single value (a
+one-element tuple), a list or a tuple of values, or a list of `(key, value)`
+pairs (a mapping). -/
+class ToPercentArgs (α : Type u) where
+  toPercentArgs : α → PercentArgs
 
-/-- `t % arg` for a single argument (upstream wraps it in a 1-tuple). -/
-instance : HMod Markup FormatArg (Except FormatError Markup) :=
-  ⟨fun t x => t.mod (.tuple [x])⟩
+instance : ToPercentArgs PercentArgs := ⟨id⟩
+
+instance (priority := low) {α : Type u} [ToFormatArg α] : ToPercentArgs α :=
+  ⟨fun x => .tuple [ToFormatArg.toFormatArg x]⟩
+
+instance {α : Type u} [ToFormatArg α] : ToPercentArgs (List α) :=
+  ⟨fun xs => .tuple (xs.map ToFormatArg.toFormatArg)⟩
+
+instance (priority := high) {α : Type u} [ToFormatArg α] : ToPercentArgs (List (String × α)) :=
+  ⟨fun kv => .mapping (kv.map fun p => (p.1, ToFormatArg.toFormatArg p.2))⟩
+
+/-- The values of a Lean tuple `(a, b, c)`, which nests as `a × (b × c)`. -/
+class ToArgTuple (α : Type u) where
+  toArgs : α → List FormatArg
+
+instance (priority := low) {α : Type u} [ToFormatArg α] : ToArgTuple α :=
+  ⟨fun x => [ToFormatArg.toFormatArg x]⟩
+
+instance {α : Type u} {β : Type v} [ToFormatArg α] [ToArgTuple β] : ToArgTuple (α × β) :=
+  ⟨fun p => ToFormatArg.toFormatArg p.1 :: ToArgTuple.toArgs p.2⟩
+
+/-- `(a, b, ...)`: a tuple of values. -/
+instance {α : Type u} {β : Type v} [ToFormatArg α] [ToArgTuple β] : ToPercentArgs (α × β) :=
+  ⟨fun p => .tuple (ToArgTuple.toArgs p)⟩
+
+/-- `t % args` (upstream `Markup.__mod__`): `Markup.mk "%s" % "<a>"`,
+`t % ["<a>", "<b>"]`, `t % ("<a>", 3)`, `t % [("key", "<a>")]`. -/
+instance {α : Type u} [ToPercentArgs α] : HMod Markup α (Except FormatError Markup) :=
+  ⟨fun t x => t.mod (ToPercentArgs.toPercentArgs x)⟩
 
 end LeanMarkupsafe

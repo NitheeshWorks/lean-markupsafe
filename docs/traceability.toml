@@ -75,7 +75,7 @@ upstream = "tests/test_markupsafe.py::test_unescape"
 title = "unescape (escape s) = s, and escape (unescape s) = s on escaped text"
 status = "implemented"
 realises = ["LeanMarkupsafe.unescape", "LeanMarkupsafe.Markup.unescape", "LeanMarkupsafe.API.unescape"]
-theorem = ["LeanMarkupsafe.unescape_escape", "LeanMarkupsafe.escape_unescape", "LeanMarkupsafe.escape_injective"]
+theorem = ["LeanMarkupsafe.unescape_escape", "LeanMarkupsafe.escape_unescape", "LeanMarkupsafe.escape_injective", "LeanMarkupsafe.escapeCodec", "LeanMarkupsafe.unescape_decode", "LeanMarkupsafe.escapeCodec_encode", "LeanMarkupsafe.escapedChar_escapeChar"]
 test = ["tests/Conformance.lean::unescape", "tests/Props.lean::unescape (escape s) = s (smoke test of unescape_escape)"]
 
 [[requirement]]
@@ -280,7 +280,7 @@ note = "FormatArg mappings have no repr; returns FormatError.unsupported. Mixed 
 [[requirement]]
 id = "format.ergonomics"
 upstream = "README.md (Examples)"
-title = "format/% arguments written as plain strings, numbers and Markup"
+title = "format/% arguments written as plain strings, numbers and Markup; Markup % value, % [values], % (a, b), % [(key, value)]"
 status = "implemented"
-realises = ["LeanMarkupsafe.FormatArg.ofString", "LeanMarkupsafe.FormatArg.ofMarkup", "LeanMarkupsafe.FormatArg.ofNat"]
-test = ["tests/Conformance.lean::readme_examples"]
+realises = ["LeanMarkupsafe.FormatArg.ofString", "LeanMarkupsafe.FormatArg.ofMarkup", "LeanMarkupsafe.FormatArg.ofNat", "LeanMarkupsafe.ToPercentArgs", "LeanMarkupsafe.ToArgTuple"]
+test = ["tests/Conformance.lean::readme_examples", "tests/Conformance.lean::percent_plain_values"]

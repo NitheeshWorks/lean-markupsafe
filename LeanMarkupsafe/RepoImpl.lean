@@ -3,3 +3,4 @@ import LeanMarkupsafe.RepoImpl.Entities
 import LeanMarkupsafe.RepoImpl.Unescape
 import LeanMarkupsafe.RepoImpl.StripTags
 import LeanMarkupsafe.RepoImpl.Format
+import LeanMarkupsafe.RepoImpl.Codec

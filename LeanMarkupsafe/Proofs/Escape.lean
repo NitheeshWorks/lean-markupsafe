@@ -4,7 +4,6 @@ import LeanMarkupsafe.Specifications
 # Proofs: escape, unescape and the `Esc` invariant
 
 * `escape_sound`: `escape` output is `IsEscaped`.
-* `unescape_escape`: `unescape ∘ escape = id`.
 * `escape_unescape`: `escape ∘ unescape = id` on escaped text, hence
   `isEscaped_iff` (escaped text is exactly the image of `escape`) and a
   `Decidable` instance for `IsEscaped`.
@@ -161,31 +160,6 @@ theorem decodeRef_gt (r : List Char) : decodeRef ('g' :: 't' :: ';' :: r) = some
 theorem decodeRef_quot (r : List Char) : decodeRef ('#' :: '3' :: '4' :: ';' :: r) = some (['"'], r) := rfl
 theorem decodeRef_apos (r : List Char) : decodeRef ('#' :: '3' :: '9' :: ';' :: r) = some (['\''], r) := rfl
 
-theorem unescapeList_escapeChar (c : Char) (l : List Char) :
-    unescapeList (escapeChar c ++ l) = c :: unescapeList l := by
-  rw [escapeChar_eq]
-  split
-  · subst_vars; exact unescapeList_amp_of_decode (decodeRef_amp l)
-  split
-  · subst_vars; exact unescapeList_amp_of_decode (decodeRef_lt l)
-  split
-  · subst_vars; exact unescapeList_amp_of_decode (decodeRef_gt l)
-  split
-  · subst_vars; exact unescapeList_amp_of_decode (decodeRef_quot l)
-  split
-  · subst_vars; exact unescapeList_amp_of_decode (decodeRef_apos l)
-  · rename_i h _ _ _ _; exact unescapeList_cons_of_ne l h
-
-theorem unescapeList_escapeList (l : List Char) : unescapeList (escapeList l) = l := by
-  induction l with
-  | nil => rw [escapeList_nil, unescapeList]
-  | cons c l ih => rw [escapeList_cons, unescapeList_escapeChar, ih]
-
-/-- `unescape_escape`: unescaping undoes escaping. -/
-theorem unescape_escape : Spec.unescapeEscape := by
-  intro s
-  simp [unescape, unescapeList_escapeList]
-
 theorem escapeList_unescapeList {l : List Char} (h : Esc l) : escapeList (unescapeList l) = l := by
   induction h with
   | nil => rw [unescapeList]; rfl
@@ -234,12 +208,6 @@ instance (l : List Char) : Decidable (Esc l) := decidable_of_iff _ (esc_iff_roun
 instance (s : String) : Decidable (IsEscaped s) :=
   inferInstanceAs (Decidable (Esc s.toList))
 
-/-- `escape` is injective. -/
-theorem escape_injective : Spec.escapeInjective := by
-  intro s t h
-  have := congrArg (fun m => unescape m.str) h
-  rwa [unescape_escape s, unescape_escape t] at this
-
 /-! ## Length -/
 
 theorem escapeList_length (l : List Char) :
@@ -279,5 +247,8 @@ theorem escape_string (s : String) : Markup.escape s = escape s := rfl
 theorem softStr_markup : Spec.softStrMarkup := fun _ => ⟨rfl, rfl⟩
 
 theorem escapeSilent_spec : Spec.escapeSilentSpec := ⟨rfl, fun _ => rfl⟩
+
+-- `unescape_escape` and `escape_injective` are instances of the Keel codec
+-- law, in `Proofs/Codec.lean`.
 
 end LeanMarkupsafe

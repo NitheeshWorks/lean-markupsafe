@@ -37,8 +37,10 @@ def template := Markup.mk "Hello <em>{name}</em>"
 
 #eval Markup.mk "<em>Hello</em> " ++ "<foo>"
 -- Markup.mk "<em>Hello</em> &lt;foo&gt;"
-#eval Markup.mk "<em>%s</em>" % ("foo & bar" : FormatArg)
+#eval Markup.mk "<em>%s</em>" % "foo & bar"
 -- Except.ok (Markup.mk "<em>foo &amp; bar</em>")
+#eval Markup.mk "<em>%s:%s</em>" % ("<foo>", "<bar>")
+-- Except.ok (Markup.mk "<em>&lt;foo&gt;:&lt;bar&gt;</em>")
 #eval (Markup.mk "Main &raquo;\t<em>About</em>").striptags
 -- "Main » About"
 ```
@@ -75,10 +77,11 @@ All in `LeanMarkupsafe/Proofs/`, bundled in `Proofs/Verified.lean`:
 | Theorem | In words | Statement |
 |---|---|---|
 | `escape_sound` | escaping yields escaped text | `IsEscaped (escape s).str` |
-| `unescape_escape` | unescaping undoes escaping | `unescape (escape s).str = s` |
+| `escapeCodec` (a lawful `Keel.Codec`) | escaping is the encoder of a lawful codec whose decoder is `unescape` on escaped text | `escapeCodec.encode s = (escape s).str.toList` |
+| `unescape_escape` | unescaping undoes escaping (an instance of the codec law `Codec.decode_encode`) | `unescape (escape s).str = s` |
 | `escape_unescape` | on escaped text, escaping undoes unescaping | `IsEscaped s → (escape (unescape s)).str = s` |
 | `isEscaped_iff` | escaped text is exactly what `escape` produces | `IsEscaped s ↔ ∃ t, (escape t).str = s` |
-| `escape_injective` | | `escape s = escape t → s = t` |
+| `escape_injective` | escaping loses nothing (an instance of `Codec.encode_injective`) | `escape s = escape t → s = t` |
 | `escape_markup_id` | markup is not escaped again | `Markup.escape m = m` |
 | `escape_length` | exact length | `(escape s).str.length = s.length + 4·#& + 3·#< + 3·#> + 4·#" + 4·#'` |
 | `concat_markup_markup`, `join_closed`, … | concatenation and `join` keep text escaped | `IsEscaped a.str → IsEscaped b.str → IsEscaped (a ++ b).str` |
@@ -104,7 +107,8 @@ Toolchain: `leanprover/lean4:v4.35.0` (pinned in `lean-toolchain`; `elan` instal
 
 Part of the verified FastAPI stack: [lean-fastapi](https://github.com/NitheeshWorks/lean-fastapi)
 and its dependencies, each ported as its own repo with its proofs. This one
-depends on: none (Lean core only).
+depends on [lean-keel](https://github.com/NitheeshWorks/lean-keel), the
+stack's shared theory library (`Keel.Codec`).
 
 ## License
 

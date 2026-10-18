@@ -1,4 +1,4 @@
-import LeanMarkupsafe.Proofs.Escape
+import LeanMarkupsafe.Proofs.Codec
 
 /-!
 # Proofs: the template theory
@@ -117,53 +117,61 @@ theorem Esc.after_delimited {a b : Char} {mid post : List Char} (hb : IsBoundary
     (h : Esc (a :: (mid ++ [b]) ++ post)) : Esc post :=
   Esc.suffix_after hb.1 hb.2 h (a :: mid) post (by simp)
 
+/-- The induction hypothesis of `fill_escaped`, for templates shorter than
+`n` segments. -/
+def FillsEscaped (n : Nat) : Prop :=
+  ∀ (ms : List Markup), (∀ m ∈ ms, IsEscaped m.str) → ∀ segs : List Seg, segs.length ≤ n →
+    (∀ s ∈ segs, s.Delimited) → Esc (printSegs segs) → Esc (fillSegs segs ms)
+
+/-- A reference in the template is a run of text segments, copied whole. -/
+theorem fill_escaped_amp {n : Nat} (ih : FillsEscaped n) {ms : List Markup}
+    (hms : ∀ m ∈ ms, IsEscaped m.str) {rest : List Seg} (hl : rest.length ≤ n)
+    (hd : ∀ s ∈ rest, s.Delimited) (he : Esc ('&' :: printSegs rest)) :
+    Esc (fillSegs (.text '&' :: rest) ms) := by
+  obtain ⟨e, hmem, R, heq, hR⟩ := Esc.amp_inv he
+  obtain ⟨t, rfl⟩ := entities_head e hmem
+  simp only [List.cons_append, List.cons.injEq, true_and] at heq
+  obtain ⟨rest', rfl, h2, h3⟩ :=
+    texts_of_print_prefix t hd (by simpa using entity_tail_not_boundary _ hmem) heq
+  simp only [fillSegs, fillSegs_texts]
+  exact Esc.ent hmem (ih ms hms rest' (by simp at hl; omega) h3 (h2 ▸ hR))
+
+/-- One segment step of `fill_escaped`. -/
+theorem fill_escaped_cons {n : Nat} (ih : FillsEscaped n) (ms : List Markup)
+    (hms : ∀ m ∈ ms, IsEscaped m.str) (s : Seg) (rest : List Seg) (hl : rest.length ≤ n)
+    (hd : ∀ x ∈ s :: rest, x.Delimited) (he : Esc (printSegs (s :: rest))) :
+    Esc (fillSegs (s :: rest) ms) := by
+  have hdr : ∀ x ∈ rest, x.Delimited := fun x hx => hd x (by simp [hx])
+  simp only [printSegs] at he
+  have hds := hd s (by simp)
+  cases s with
+  | text c =>
+    by_cases hc : c = '&'
+    · subst hc; exact fill_escaped_amp ih hms hl hdr he
+    · obtain ⟨hs, hr⟩ := Esc.tail_of_ne_amp he hc
+      exact Esc.char hs (ih ms hms rest hl hdr hr)
+  | quote src c =>
+    obtain ⟨hc, a, mid, b, rfl, -, hb⟩ := hds
+    exact Esc.char hc (ih ms hms rest hl hdr (Esc.after_delimited hb he))
+  | field src fn conv =>
+    obtain ⟨a, mid, b, rfl, -, hb⟩ := hds
+    have hr := Esc.after_delimited hb he
+    cases ms with
+    | nil => exact ih [] (by simp) rest hl hdr hr
+    | cons m ms =>
+      exact (hms m (by simp)).append (ih ms (fun x hx => hms x (by simp [hx])) rest hl hdr hr)
+
+theorem fillsEscaped : ∀ n, FillsEscaped n
+  | 0, _, _, [], _, _, _ => Esc.nil
+  | 0, _, _, _ :: _, hl, _, _ => by simp at hl
+  | _ + 1, _, _, [], _, _, _ => Esc.nil
+  | n + 1, ms, hms, s :: rest, hl, hd, he =>
+    fill_escaped_cons (fillsEscaped n) ms hms s rest (by simp at hl; omega) hd he
+
 /-- `fill_escaped`: filling an escaped, delimited template with escaped
 renderings gives escaped text. -/
-theorem fill_escaped (ms : List Markup) (hms : ∀ m ∈ ms, IsEscaped m.str) :
-    ∀ (n : Nat) (segs : List Seg), segs.length ≤ n → (∀ s ∈ segs, s.Delimited) →
-      Esc (printSegs segs) → Esc (fillSegs segs ms) := by
-  intro n
-  induction n generalizing ms with
-  | zero =>
-    intro segs hl _ _
-    have : segs = [] := List.eq_nil_of_length_eq_zero (by omega)
-    subst this; exact Esc.nil
-  | succ n ih =>
-    intro segs hl hd he
-    cases segs with
-    | nil => exact Esc.nil
-    | cons s rest =>
-      have hdr : ∀ s ∈ rest, s.Delimited := fun s hs => hd s (by simp [hs])
-      simp only [List.length_cons] at hl
-      cases s with
-      | text c =>
-        simp only [printSegs, Seg.src, List.singleton_append] at he
-        by_cases hc : c = '&'
-        · subst hc
-          obtain ⟨e, hmem, R, heq, hR⟩ := Esc.amp_inv he
-          obtain ⟨t, rfl⟩ := entities_head e hmem
-          simp only [List.cons_append, List.cons.injEq, true_and] at heq
-          obtain ⟨rest', h1, h2, h3⟩ := texts_of_print_prefix t hdr
-            (by simpa using entity_tail_not_boundary _ hmem) heq
-          subst h1
-          simp only [fillSegs, fillSegs_texts]
-          have hlen : rest'.length ≤ n := by simp at hl; omega
-          have := ih ms hms rest' hlen h3 (h2 ▸ hR)
-          exact Esc.ent hmem this
-        · obtain ⟨hs, hr⟩ := Esc.tail_of_ne_amp he hc
-          exact Esc.char hs (ih ms hms rest (by omega) hdr hr)
-      | quote src c =>
-        obtain ⟨hc, a, mid, b, rfl, -, hb⟩ := hd (.quote src c) (by simp)
-        simp only [printSegs, Seg.src] at he
-        exact Esc.char hc (ih ms hms rest (by omega) hdr (Esc.after_delimited hb he))
-      | field src fn conv =>
-        obtain ⟨a, mid, b, rfl, -, hb⟩ := hd (.field src fn conv) (by simp)
-        simp only [printSegs, Seg.src] at he
-        have hr := Esc.after_delimited hb he
-        cases ms with
-        | nil => exact ih [] (by simp) rest (by omega) hdr hr
-        | cons m ms =>
-          exact (hms m (by simp)).append
-            (ih ms (fun x hx => hms x (by simp [hx])) rest (by omega) hdr hr)
+theorem fill_escaped {segs : List Seg} {ms : List Markup} (hd : ∀ s ∈ segs, s.Delimited)
+    (hms : ∀ m ∈ ms, IsEscaped m.str) (he : Esc (printSegs segs)) : Esc (fillSegs segs ms) :=
+  fillsEscaped _ ms hms segs (Nat.le_refl _) hd he
 
 end LeanMarkupsafe

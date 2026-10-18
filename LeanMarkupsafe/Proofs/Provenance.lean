@@ -473,8 +473,7 @@ theorem format_closed : Spec.formatClosed := by
   obtain ⟨segs, ms, hwf, hp, hf, hr⟩ := format_interpolates _ _ _ _ h
   show Esc r.str.toList
   rw [hr]
-  exact fill_escaped ms (fills_escaped hpos hnamed hf) _ segs (Nat.le_refl _)
-    (fun s hs => (hwf s hs).delimited) (hp ▸ ht)
+  exact fill_escaped (fun s hs => (hwf s hs).delimited) (fills_escaped hpos hnamed hf) (hp ▸ ht)
 
 /-- `%` of an escaped-text template with safe arguments is escaped. -/
 theorem mod_closed : Spec.modClosed := by
@@ -483,12 +482,10 @@ theorem mod_closed : Spec.modClosed := by
   · obtain ⟨segs, ms, hwf, hp, hf, hr, -⟩ := mod_tuple_interpolates _ _ _ h
     show Esc r.str.toList
     rw [hr]
-    exact fill_escaped ms (fills_escaped hxs (by simp) hf) _ segs (Nat.le_refl _)
-      (fun s hs => (hwf s hs).delimited) (hp ▸ ht)
+    exact fill_escaped (fun s hs => (hwf s hs).delimited) (fills_escaped hxs (by simp) hf) (hp ▸ ht)
   · obtain ⟨segs, ms, hwf, hp, hf, hr⟩ := mod_mapping_interpolates _ _ _ h
     show Esc r.str.toList
     rw [hr]
-    exact fill_escaped ms (fills_escaped (by simp) hkv hf) _ segs (Nat.le_refl _)
-      (fun s hs => (hwf s hs).delimited) (hp ▸ ht)
+    exact fill_escaped (fun s hs => (hwf s hs).delimited) (fills_escaped (by simp) hkv hf) (hp ▸ ht)
 
 end LeanMarkupsafe
