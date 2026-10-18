@@ -32,7 +32,7 @@ def entities : List (List Char) :=
 /-- Characters that occur inside one of the five references after its `&`.
 Any other non-special character is a token boundary in an escaped string. -/
 def isEntityChar (c : Char) : Bool :=
-  "amp;ltg#349".contains c
+  ['a', 'm', 'p', ';', 'l', 't', 'g', '#', '3', '4', '9'].contains c
 
 /-- A character list is a sequence of safe characters and the five
 references `escape` emits. -/

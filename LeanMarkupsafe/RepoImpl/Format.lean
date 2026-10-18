@@ -241,7 +241,8 @@ theorem takeKey_length {l k r : List Char} (h : takeKey l = some (k, r)) :
 def percentConv (c : Char) : Except FormatError Conversion :=
   if c = 's' then .ok .percentStr
   else if c = 'd' ∨ c = 'i' then .ok .percentInt
-  else if "rac".contains c ∨ "xXoeEfFgGu".contains c ∨ "-+ #0123456789.*".contains c then
+  else if ['r', 'a', 'c', 'x', 'X', 'o', 'e', 'E', 'f', 'F', 'g', 'G', 'u', '-', '+', ' ', '#',
+      '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '*'].contains c then
     .error (.unsupported s!"%-format conversion, flag or width '{c}'")
   else .error (.badTemplate s!"unsupported format character '{c}'")
 
