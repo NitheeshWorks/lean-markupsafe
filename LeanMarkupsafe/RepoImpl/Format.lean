@@ -107,6 +107,13 @@ def ofHtmlFormat {α : Type u} [HasHtmlFormat α] (x : α) : FormatArg where
 
 end FormatArg
 
+/-- A string literal can stand for a string argument:
+`t.format [] [("name", "World")]`. -/
+instance : Coe String FormatArg := ⟨FormatArg.ofString⟩
+instance : Coe Markup FormatArg := ⟨FormatArg.ofMarkup⟩
+instance : Coe Int FormatArg := ⟨FormatArg.ofInt⟩
+instance : Coe Nat FormatArg := ⟨FormatArg.ofNat⟩
+
 /-- Values that can be passed to `format`/`%`. -/
 class ToFormatArg (α : Type u) where
   toFormatArg : α → FormatArg
@@ -169,32 +176,74 @@ def splitField (field : List Char) : List Char × List Char :=
   let name := field.takeWhile (· ≠ ':')
   (name, (field.drop name.length).drop 1)
 
+/-- What a field's name says: `{}` (next automatic index), `{0}` (an
+explicit index) or `{name}` (a keyword). `%s` is `auto` and `%(key)s` is
+`key`. -/
+inductive FieldName where
+  | auto
+  | index (i : Nat)
+  | key (k : String)
+  deriving DecidableEq, Repr
+
+/-- The argument a field draws on: a position or a keyword. -/
+inductive ArgRef where
+  | pos (i : Nat)
+  | key (k : String)
+  deriving DecidableEq, Repr
+
+/-- The argument `r` refers to. -/
+def ArgRef.lookup (pos : List FormatArg) (named : List (String × FormatArg)) :
+    ArgRef → Option FormatArg
+  | .pos i => pos[i]?
+  | .key k => named.lookup k
+
+/-- The reference a field name makes when `n` automatic fields precede it. -/
+def FieldName.ref (n : Nat) : FieldName → ArgRef
+  | .auto => .pos n
+  | .index i => .pos i
+  | .key k => .key k
+
+/-- The automatic counter after a field. -/
+def FieldName.next (n : Nat) : FieldName → Nat
+  | .auto => n + 1
+  | _ => n
+
+/-- Read a field name. -/
+def parseFieldName (name : List Char) : Except FormatError FieldName :=
+  if name.any (fun c => c = '.' || c = '[' || c = '!') then
+    .error (.unsupported "attribute, index or conversion in a format field")
+  else if name.isEmpty then .ok .auto
+  else if name.all isDecDigit then .ok (.index (decValue name))
+  else .ok (.key (String.ofList name))
+
+/-- The automatic counter a numbering state holds. -/
+def Numbering.counter : Numbering → Nat
+  | .auto n => n
+  | _ => 0
+
+/-- The numbering state after a field, or the mixing error. -/
+def Numbering.step : Numbering → FieldName → Except FormatError Numbering
+  | .manual, .auto => .error .mixedNumbering
+  | st, .auto => .ok (.auto (st.counter + 1))
+  | .auto _, .index _ => .error .mixedNumbering
+  | _, .index _ => .ok .manual
+  | st, .key _ => .ok st
+
 /-- Look up the argument a field names, advancing the numbering. -/
 def resolveField (pos : List FormatArg) (named : List (String × FormatArg))
     (st : Numbering) (name : List Char) : Except FormatError (FormatArg × Numbering) :=
-  if name.any (fun c => c = '.' || c = '[' || c = '!') then
-    .error (.unsupported "attribute, index or conversion in a format field")
-  else if name.isEmpty then
-    match st with
-    | .manual => .error .mixedNumbering
-    | .unset | .auto _ =>
-      let i := match st with | .auto n => n | _ => 0
-      match pos[i]? with
-      | some a => .ok (a, .auto (i + 1))
-      | none => .error (.indexOutOfRange i)
-  else if name.all isDecDigit then
-    match st with
-    | .auto _ => .error .mixedNumbering
-    | .unset | .manual =>
-      let i := decValue name
-      match pos[i]? with
-      | some a => .ok (a, .manual)
-      | none => .error (.indexOutOfRange i)
-  else
-    let key := String.ofList name
-    match named.lookup key with
-    | some a => .ok (a, st)
-    | none => .error (.missingKey key)
+  match parseFieldName name with
+  | .error e => .error e
+  | .ok fn =>
+    match st.step fn with
+    | .error e => .error e
+    | .ok st' =>
+      match (fn.ref st.counter).lookup pos named with
+      | some a => .ok (a, st')
+      | none =>
+        match fn.ref st.counter with
+        | .pos i => .error (.indexOutOfRange i)
+        | .key k => .error (.missingKey k)
 
 /-- Render one field. -/
 def renderField (pos : List FormatArg) (named : List (String × FormatArg))

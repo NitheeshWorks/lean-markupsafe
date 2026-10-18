@@ -7,7 +7,7 @@ import LeanMarkupsafe.Proofs.Verified
 A clean-room port of MarkupSafe to Lean 4, with proved escape/unescape.
 `Markup` is trusted, unchecked HTML (upstream semantics); the proved
 invariant is carried by `Escaped := {m : Markup // IsEscaped m.str}`, by the
-`API.*` refinements, and by the provenance theorems for trusted templates.
+`API.*` refinements, and by the interpolation theorems for trusted templates.
 
 Layering, bottom to top (each layer imports only the ones below it):
 

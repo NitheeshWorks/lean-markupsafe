@@ -127,6 +127,15 @@ def cases : List Case :=
       (match API.formatStrings (Markup.mk "<em>{}</em>") ["<bad user>"] with
        | .ok r => r.val.str == "<em>&lt;bad user&gt;</em>"
        | .error _ => false),
+    check "src/markupsafe/__init__.py::Markup.__mod__" "positional_with_mapping"
+      (isErr ((Markup.mk "%s").mod (.mapping [("a", .ofNat 1)]))),
+    check "README.md (Examples)" "readme_examples"
+      ((escape "<script>alert(document.cookie);</script>").str ==
+         "&lt;script&gt;alert(document.cookie);&lt;/script&gt;" &&
+       Markup.escape (Markup.mk "<strong>Hello</strong>") == Markup.mk "<strong>Hello</strong>" &&
+       okStr ((Markup.mk "Hello <em>{name}</em>").format [] [("name", "\"World\"")])
+         "Hello <em>&#34;World&#34;</em>" &&
+       okStr ((Markup.mk "<em>{}</em> {}").format ["<x>", (3 : Nat)]) "<em>&lt;x&gt;</em> 3"),
     check "tests/test_markupsafe.py::test_type_behavior" "type_behavior"
       ((Markup.mk "foo" ++ "bar").str == "foobar" && HasHtml.html (Markup.mk "foo") == Markup.mk "foo"),
     check "tests/test_markupsafe.py::test_html_interop" "html_interop"

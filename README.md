@@ -3,34 +3,93 @@
 [![Lean 4](https://img.shields.io/badge/built%20with-Lean%204-blue.svg)](https://lean-lang.org)
 [![Proofs](https://img.shields.io/badge/proofs-machine%20checked-brightgreen.svg)](CONTRIBUTING.md#verification)
 
-A clean-room port of [MarkupSafe](https://github.com/pallets/markupsafe) to Lean 4, with proved escape/unescape.
+A clean-room port of [MarkupSafe](https://github.com/pallets/markupsafe) to
+Lean 4, with machine-checked proofs.
 
-`Markup` has upstream's semantics: it is trusted, unchecked HTML. `Markup.mk s`
-(upstream `Markup(s)`) marks any string safe, and a `HasHtml` instance's
-rendering is used verbatim, so a `Markup` value is not a proof of escaping. The
-proved invariant lives elsewhere. `LeanMarkupsafe.Escaped := {m : Markup //
-IsEscaped m.str}` is markup proved to be escaped text, and the `LeanMarkupsafe.API.*`
-functions return it, or another refinement, with the guarantee in the type. For
-templates that are trusted HTML, such as `<em>{}</em>`, the guarantee is
-provenance (`format_provenance`, `mod_provenance`, `API.formatTrusted`,
-`API.formatStrings`): the output is the template's own literal text with every
-field replaced by an argument's rendering, and a string argument always
-appears as `escape s` under `{}` and `%s` (as an escaped integer under `%d`).
+MarkupSafe implements a text object that escapes characters so it is safe to
+use in HTML and XML. Characters that have special meanings are replaced so
+that they display as the actual characters. This mitigates injection attacks,
+meaning untrusted user input can safely be displayed on a page.
 
-Part of the verified FastAPI stack: [lean-fastapi](https://github.com/NitheeshWorks/lean-fastapi)
-and its dependencies, each ported as its own repo with its proofs. This one
-depends on: none (Lean core only).
+## Examples
 
-## What "verified" means here
+The upstream README's examples, translated:
 
-* Public functions take the weakest precondition they need and return the
-  strongest postcondition, as a refinement type `{r // Post r}` or an
-  `Except` of one. Invariants live in types, not comments.
-* Every theorem is machine-checked. CI fails on `sorry` and on any axiom
-  beyond Lean's own `propext`, `Quot.sound` and `Classical.choice`.
-* What is tested rather than proved is listed, with the reason, in
-  [CONTRIBUTING.md](CONTRIBUTING.md#verification) and in
-  `docs/traceability.toml`.
+```lean
+import LeanMarkupsafe
+open LeanMarkupsafe
+
+-- escape replaces special characters and wraps in Markup
+#eval escape "<script>alert(document.cookie);</script>"
+-- Markup.mk "&lt;script&gt;alert(document.cookie);&lt;/script&gt;"
+
+-- wrap in Markup to mark text "safe" and prevent escaping
+#eval Markup.mk "<strong>Hello</strong>"
+-- Markup.mk "<strong>Hello</strong>"
+
+#eval Markup.escape (Markup.mk "<strong>Hello</strong>")
+-- Markup.mk "<strong>Hello</strong>"
+
+-- methods and operators escape their arguments
+def template := Markup.mk "Hello <em>{name}</em>"
+#eval template.format [] [("name", "\"World\"")]
+-- Except.ok (Markup.mk "Hello <em>&#34;World&#34;</em>")
+
+#eval Markup.mk "<em>Hello</em> " ++ "<foo>"
+-- Markup.mk "<em>Hello</em> &lt;foo&gt;"
+#eval Markup.mk "<em>%s</em>" % ("foo & bar" : FormatArg)
+-- Except.ok (Markup.mk "<em>foo &amp; bar</em>")
+#eval (Markup.mk "Main &raquo;\t<em>About</em>").striptags
+-- "Main » About"
+```
+
+A type opts into safe rendering with `instance : HasHtml T := ⟨fun t => ...⟩`
+(upstream `__html__`), or `HasHtmlFormat` for `__html_format__`.
+`Markup.escape`, `++`, `join`, `format` and `%` then use its rendering
+instead of escaping it. `format` and `%` return `Except FormatError Markup`
+where upstream raises.
+
+## What a `Markup` value means
+
+As upstream, `Markup` is trusted, unchecked HTML: `Markup.mk s` (upstream
+`Markup(s)`) marks any string safe, and a `HasHtml` rendering is used
+verbatim. A `Markup` value is not a proof that anything was escaped. The
+proved guarantees are carried by:
+
+* `Escaped := {m : Markup // IsEscaped m.str}`: markup proved to be escaped
+  text (no raw `< > " '`, every `&` starting `&amp; &lt; &gt; &#34; &#39;`).
+* the `LeanMarkupsafe.API` functions, which return refinements;
+* for trusted HTML templates such as `<em>{}</em>`, the interpolation
+  theorems below and `API.formatTrusted`, `API.formatStrings`,
+  `API.modTrusted`, `API.modStrings`, whose return types say exactly what
+  the output is.
+
+A templating engine (lean-jinja2) should keep untrusted text as `String`,
+build output with `escape`, `++` and `API.formatStrings`, and treat any
+`Markup` it receives as trusted.
+
+## What is proved
+
+All in `LeanMarkupsafe/Proofs/`, bundled in `Proofs/Verified.lean`:
+
+| Theorem | In words | Statement |
+|---|---|---|
+| `escape_sound` | escaping yields escaped text | `IsEscaped (escape s).str` |
+| `unescape_escape` | unescaping undoes escaping | `unescape (escape s).str = s` |
+| `escape_unescape` | on escaped text, escaping undoes unescaping | `IsEscaped s → (escape (unescape s)).str = s` |
+| `isEscaped_iff` | escaped text is exactly what `escape` produces | `IsEscaped s ↔ ∃ t, (escape t).str = s` |
+| `escape_injective` | | `escape s = escape t → s = t` |
+| `escape_markup_id` | markup is not escaped again | `Markup.escape m = m` |
+| `escape_length` | exact length | `(escape s).str.length = s.length + 4·#& + 3·#< + 3·#> + 4·#" + 4·#'` |
+| `concat_markup_markup`, `join_closed`, … | concatenation and `join` keep text escaped | `IsEscaped a.str → IsEscaped b.str → IsEscaped (a ++ b).str` |
+| `format_interpolates` | for any template, `format` replaces the `i`-th field by the rendering of the argument it names, and changes nothing else | `t.format pos named = .ok r → Interpolates BraceSeg pos named t r` |
+| `mod_tuple_interpolates`, `mod_mapping_interpolates` | the same for `%`; a tuple is used up exactly | `t.mod (.tuple xs) = .ok r → InterpolatesAll PercentSeg xs t r` |
+| `format_strings` | with string arguments every field becomes `escape` of its string | `r.str = String.ofList (fillSegs segs (args.map escape))` |
+| `fill_escaped` → `format_closed`, `mod_closed` | an escaped template with safe arguments gives escaped text | `IsEscaped t.str → … → IsEscaped r.str` |
+| `striptags_no_tags` | no complete tag survives tag removal | `NoCompleteTag (removeTags l)` |
+
+What is tested rather than proved, and every deviation from upstream, is in
+[CONTRIBUTING.md](CONTRIBUTING.md#verification) and `docs/traceability.toml`.
 
 ## Getting started
 
@@ -43,31 +102,9 @@ scripts/check.sh      # the whole CI gate, locally
 
 Toolchain: `leanprover/lean4:v4.35.0` (pinned in `lean-toolchain`; `elan` installs it).
 
-## Using it
-
-```lean
-import LeanMarkupsafe
-open LeanMarkupsafe
-
-#eval (escape "<b>&</b>").str                     -- "&lt;b&gt;&amp;&lt;/b&gt;"
-#eval (Markup.mk "<em>" ++ "<x>" ++ Markup.mk "</em>").str   -- "<em>&lt;x&gt;</em>"
-#eval (Markup.mk "<p>{}</p>").format [.ofString "a < b"]     -- ok "<p>a &lt; b</p>"
-#eval (Markup.mk "Main &raquo;\t<em>About</em>").striptags  -- "Main » About"
-```
-
-A type opts into safe rendering with `instance : HasHtml T := ⟨fun t => ...⟩`
-(upstream `__html__`); `Markup.escape`, concatenation, `join` and `format`
-then use that rendering instead of escaping. `LeanMarkupsafe.API` has the
-same operations with their guarantees in the types (`Escaped`, `SafeArg`,
-and the provenance refinements of `formatTrusted`/`formatStrings`/
-`modTrusted`/`modStrings`). lean-jinja2 should keep untrusted text as
-`String`, build output with `escape`, `++` and `API.formatStrings`, and treat
-any `Markup` it receives as trusted.
-
-## Status
-
-Milestone 9: the MarkupSafe surface lean-jinja2 needs, with the theorem
-catalogue proved (see CONTRIBUTING.md).
+Part of the verified FastAPI stack: [lean-fastapi](https://github.com/NitheeshWorks/lean-fastapi)
+and its dependencies, each ported as its own repo with its proofs. This one
+depends on: none (Lean core only).
 
 ## License
 

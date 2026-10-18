@@ -57,17 +57,26 @@ be a Hoare triple over a heap.
   `concat_string_closed`, `join_closed`, `join_markup_closed`,
   `format_closed`, `mod_closed`, `argsSafe_proof`.
 * `VerifiedStripTags`: `striptags_no_tags`, `removeTags_no_lt`, `striptags_eq`.
-* `VerifiedProvenance`: `format_provenance`, `mod_provenance` (for any
-  template, trusted HTML included: the output is the template's segments with
-  literals copied, `{{`/`}}`/`%%` unquoted and each field replaced by an
-  argument rendering), `string_arg_rendering`, `format_string_args_escaped`
-  and `mod_string_args_escaped` (string arguments appear as `escape s`).
+* `VerifiedInterpolation`: `format_interpolates`, `mod_tuple_interpolates`,
+  `mod_mapping_interpolates` (for any template, trusted HTML included: the
+  output is the template's segments with literals copied, `{{`/`}}`/`%%`
+  unquoted, and the `i`-th field replaced by the rendering of the argument
+  `fieldRefs` assigns it: automatic fields take positions 0, 1, ... in
+  order, `{3}` position 3, `{name}`/`%(name)s` a keyword; a `%` tuple is
+  used up exactly), `string_arg_rendering`, and `format_strings` (string
+  arguments: one `escape s` per field, `s` the string that field refers to).
+
+The template theory (`Proofs/Template.lean`) is general: `fill_escaped`
+says filling an escaped template whose delimiters are token boundaries with
+escaped renderings yields escaped text, and `format_closed`/`mod_closed`
+are its two instances (`BraceSeg.delimited`, `PercentSeg.delimited`).
+Closure under `++` and `join` is `Esc.append`.
 
 **What a `Markup` value means.** `Markup` is trusted, unchecked HTML, as
 upstream: `Markup.mk` and `HasHtml` renderings are not checked. Only
 `Escaped` (and the `API.*` refinements) carry a proof. `format_closed` and
 `mod_closed` cover templates that are themselves escaped text; trusted HTML
-templates are covered by the provenance theorems.
+templates are covered by the interpolation theorems.
 
 `IsEscaped s` (`Specifications/Basic.lean`) says `s` is a sequence of
 characters other than `& < > " '` and the five references `escape` emits.
@@ -111,6 +120,10 @@ Listed here with the reason, and in `docs/traceability.toml` with
 * **`%d` of text** parses it as Python `int()` does (whitespace, sign,
   ASCII digits, single underscores); non-ASCII digits are rejected. `%r`,
   `%a`, `%c` and the float conversions are not supported.
+* **Positional `%s` with a mapping.** Upstream `Markup("%s") % {"a": 1}`
+  renders the mapping's `repr`; a `FormatArg` mapping has no `repr`, so
+  this returns `FormatError.unsupported`. Mixing `%(a)s` and `%s` with a
+  mapping is a `TypeError` upstream and an error here.
 * **Concatenation is wider than upstream.** `Markup.concat m x` accepts any
   `ToMarkup` value, including numbers through `toString`, where upstream
   `Markup + 1` raises `TypeError`. The result is still escaped.

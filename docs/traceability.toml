@@ -112,7 +112,7 @@ upstream = "tests/test_markupsafe.py::test_format"
 title = "Markup.format / format_map escape every argument; invariant closed under format"
 status = "implemented"
 realises = ["LeanMarkupsafe.Markup.format", "LeanMarkupsafe.Markup.formatMap", "LeanMarkupsafe.formatList", "LeanMarkupsafe.API.format"]
-theorem = ["LeanMarkupsafe.format_closed", "LeanMarkupsafe.argsSafe_proof"]
+theorem = ["LeanMarkupsafe.format_closed", "LeanMarkupsafe.fill_escaped", "LeanMarkupsafe.argsSafe_proof"]
 test = ["tests/Conformance.lean::format[named]", "tests/Conformance.lean::format_map", "tests/Conformance.lean::formatting_empty", "tests/Conformance.lean::formatting_with_objects"]
 
 [[requirement]]
@@ -217,12 +217,12 @@ status = "excluded"
 note = "Implementation details of the CPython extension."
 
 [[requirement]]
-id = "format.provenance"
+id = "format.interpolation"
 upstream = "tests/test_markupsafe.py::test_string_interpolation"
-title = "format/% on any (trusted HTML) template keep its literal text and insert only argument renderings; string arguments appear as escape s"
+title = "format/% on any (trusted HTML) template keep its literal text and replace each field by the rendering of the argument it names (positional in order, explicit index, keyword); string arguments appear as escape s"
 status = "implemented"
-realises = ["LeanMarkupsafe.Seg", "LeanMarkupsafe.Provenance", "LeanMarkupsafe.API.formatTrusted", "LeanMarkupsafe.API.formatStrings", "LeanMarkupsafe.API.modTrusted", "LeanMarkupsafe.API.modStrings"]
-theorem = ["LeanMarkupsafe.format_provenance", "LeanMarkupsafe.mod_provenance", "LeanMarkupsafe.string_arg_rendering", "LeanMarkupsafe.format_string_args_escaped", "LeanMarkupsafe.mod_string_args_escaped"]
+realises = ["LeanMarkupsafe.Seg", "LeanMarkupsafe.Interpolates", "LeanMarkupsafe.InterpolatesAll", "LeanMarkupsafe.fieldRefs", "LeanMarkupsafe.API.formatTrusted", "LeanMarkupsafe.API.formatStrings", "LeanMarkupsafe.API.modTrusted", "LeanMarkupsafe.API.modStrings", "LeanMarkupsafe.API.modMappingTrusted"]
+theorem = ["LeanMarkupsafe.format_interpolates", "LeanMarkupsafe.mod_tuple_interpolates", "LeanMarkupsafe.mod_mapping_interpolates", "LeanMarkupsafe.string_arg_rendering", "LeanMarkupsafe.format_strings", "LeanMarkupsafe.fill_escaped"]
 test = ["tests/Conformance.lean::trusted_template_provenance"]
 
 [[requirement]]
@@ -267,3 +267,20 @@ title = "error message for mixing automatic and manual field numbering"
 status = "deviation"
 realises = ["LeanMarkupsafe.FormatError.mixedNumbering"]
 note = "One message for both directions; upstream has two wordings. The error case is the same."
+
+[[requirement]]
+id = "mod.positional-with-mapping"
+upstream = "src/markupsafe/__init__.py::Markup.__mod__"
+title = "positional %s with a mapping argument renders the mapping's repr upstream"
+status = "deviation"
+realises = ["LeanMarkupsafe.percentList"]
+test = ["tests/Conformance.lean::positional_with_mapping"]
+note = "FormatArg mappings have no repr; returns FormatError.unsupported. Mixed %(a)s and %s with a mapping errors in both."
+
+[[requirement]]
+id = "format.ergonomics"
+upstream = "README.md (Examples)"
+title = "format/% arguments written as plain strings, numbers and Markup"
+status = "implemented"
+realises = ["LeanMarkupsafe.FormatArg.ofString", "LeanMarkupsafe.FormatArg.ofMarkup", "LeanMarkupsafe.FormatArg.ofNat"]
+test = ["tests/Conformance.lean::readme_examples"]

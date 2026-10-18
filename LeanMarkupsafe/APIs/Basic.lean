@@ -106,41 +106,46 @@ HTML (`<em>{}</em>`); for those the guarantee is provenance: the output is
 the template's own literal text with each field replaced by an argument's
 rendering, and with string arguments each inserted piece is `escape s`. -/
 
-/-- `str.format` on a trusted template: the result carries its provenance. -/
+/-- `str.format` on a trusted template: the result is the template with each
+field replaced by the rendering of the argument it refers to. -/
 def formatTrusted (t : Markup) (pos : List FormatArg) (named : List (String × FormatArg) := []) :
-    Except FormatError
-      {r : Markup // Provenance BraceSeg IsBraceConv (pos ++ named.map Prod.snd) t r} :=
+    Except FormatError {r : Markup // Interpolates BraceSeg pos named t r} :=
   match h : t.format pos named with
-  | .ok r => .ok ⟨r, format_provenance t pos named r h⟩
+  | .ok r => .ok ⟨r, format_interpolates t pos named r h⟩
   | .error e => .error e
 
-/-- `str.format` on a trusted template with string arguments: the output is
-the template's literal text with every field replaced by `escape s` for an
-argument string `s`. -/
+/-- `str.format` on a trusted template with string arguments: the result is
+the template with each field replaced by `escape` of the string it refers
+to (one string per field, in order), and nothing else changed. -/
 def formatStrings (t : Markup) (ss : List String) (kv : List (String × String) := []) :
     Except FormatError
-      {r : Markup // ∃ segs ms, (∀ s ∈ segs, BraceSeg s) ∧ printSegs segs = t.str.toList ∧
-        r.str.toList = fillSegs segs ms ∧ ∀ m ∈ ms, ∃ s ∈ ss ++ kv.map Prod.snd, m = escape s} :=
-  match h : t.format (ss.map FormatArg.ofString) (kv.map fun p => (p.1, FormatArg.ofString p.2)) with
-  | .ok r => .ok ⟨r, format_string_args_escaped t ss kv r h⟩
+      {r : Markup // ∃ segs args, (∀ s ∈ segs, BraceSeg s) ∧ printSegs segs = t.str.toList ∧
+        args.length = fieldCount segs ∧
+        Forall₂ (fun rc s => rc.1.lookupStr ss kv = some s) (fieldRefs segs) args ∧
+        r.str = String.ofList (fillSegs segs (args.map LeanMarkupsafe.escape))} :=
+  match h : t.format (ss.map .ofString) (kv.map fun p => (p.1, .ofString p.2)) with
+  | .ok r => .ok ⟨r, format_strings t ss kv r h⟩
   | .error e => .error e
 
-/-- `%` on a trusted template: the result carries its provenance. -/
-def modTrusted (t : Markup) (args : PercentArgs) :
-    Except FormatError {r : Markup // Provenance PercentSeg IsPercentConv args.toList t r} :=
-  match h : t.mod args with
-  | .ok r => .ok ⟨r, mod_provenance t args r h⟩
+/-- `%` with a tuple on a trusted template: each field is replaced by the
+rendering of its argument, and every argument is used. -/
+def modTrusted (t : Markup) (xs : List FormatArg) :
+    Except FormatError {r : Markup // InterpolatesAll PercentSeg xs t r} :=
+  match h : t.mod (.tuple xs) with
+  | .ok r => .ok ⟨r, mod_tuple_interpolates t xs r h⟩
   | .error e => .error e
 
-/-- `%` on a trusted template with string arguments: every inserted piece
-is `escape s` (under `%s`) or an escaped integer (under `%d`). -/
+/-- `%` with string arguments on a trusted template (`ofString` renders `%s`
+as `escape s`, see `string_arg_rendering`). -/
 def modStrings (t : Markup) (ss : List String) :
-    Except FormatError
-      {r : Markup // ∃ segs ms, (∀ s ∈ segs, PercentSeg s) ∧ printSegs segs = t.str.toList ∧
-        r.str.toList = fillSegs segs ms ∧
-        ∀ m ∈ ms, (∃ s ∈ ss, m = escape s) ∨ ∃ i : Int, m = escape (toString i)} :=
-  match h : t.mod (.tuple (ss.map FormatArg.ofString)) with
-  | .ok r => .ok ⟨r, mod_string_args_escaped t ss r h⟩
+    Except FormatError {r : Markup // InterpolatesAll PercentSeg (ss.map .ofString) t r} :=
+  modTrusted t (ss.map .ofString)
+
+/-- `%` with a mapping on a trusted template. -/
+def modMappingTrusted (t : Markup) (kv : List (String × FormatArg)) :
+    Except FormatError {r : Markup // Interpolates PercentSeg [] kv t r} :=
+  match h : t.mod (.mapping kv) with
+  | .ok r => .ok ⟨r, mod_mapping_interpolates t kv r h⟩
   | .error e => .error e
 
 /-- `striptags`: the three passes, and no complete tag survives the first. -/

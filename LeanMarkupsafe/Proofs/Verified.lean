@@ -92,25 +92,25 @@ theorem theVerifiedStripTags : VerifiedStripTags where
   noLt := removeTags_no_lt
   passes := striptags_eq
 
-/-- Provenance of `format`/`%` output for any template, trusted HTML
-included (`Proofs/Provenance.lean`). -/
-structure VerifiedProvenance where
-  /-- `format_provenance`. -/
-  format : Spec.formatProvenance
-  /-- `mod_provenance`. -/
-  mod : Spec.modProvenance
+/-- What `format` and `%` compute for any template, trusted HTML included
+(`Proofs/Provenance.lean`). -/
+structure VerifiedInterpolation where
+  /-- `format_interpolates`. -/
+  format : Spec.formatInterpolates
+  /-- `mod_tuple_interpolates`. -/
+  modTuple : Spec.modTupleInterpolates
+  /-- `mod_mapping_interpolates`. -/
+  modMapping : Spec.modMappingInterpolates
   /-- `string_arg_rendering`. -/
   stringArg : Spec.stringArgRendering
-  /-- `format_string_args_escaped`. -/
-  formatStrings : Spec.formatStringArgsEscaped
-  /-- `mod_string_args_escaped`. -/
-  modStrings : Spec.modStringArgsEscaped
+  /-- `format_strings`. -/
+  formatStrings : Spec.formatStrings
 
-theorem theVerifiedProvenance : VerifiedProvenance where
-  format := format_provenance
-  mod := mod_provenance
+theorem theVerifiedInterpolation : VerifiedInterpolation where
+  format := format_interpolates
+  modTuple := mod_tuple_interpolates
+  modMapping := mod_mapping_interpolates
   stringArg := string_arg_rendering
-  formatStrings := format_string_args_escaped
-  modStrings := mod_string_args_escaped
+  formatStrings := format_strings
 
 end LeanMarkupsafe

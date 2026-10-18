@@ -29,7 +29,7 @@ structure Markup where
   mk ::
   /-- The underlying text (upstream `str(markup)`). -/
   str : String
-  deriving DecidableEq, Hashable, Ord, Inhabited, Repr
+  deriving DecidableEq, Hashable, Ord, Inhabited
 
 namespace Markup
 
@@ -41,6 +41,11 @@ says what the call asserts. -/
 def markSafe (s : String) : Markup := ⟨s⟩
 
 instance : ToString Markup := ⟨Markup.str⟩
+
+/-- Shown as the Lean expression that builds it, as upstream shows
+`Markup('...')`. -/
+instance : Repr Markup where
+  reprPrec m p := Repr.addAppParen ("Markup.mk " ++ repr m.str) p
 instance : EmptyCollection Markup := ⟨empty⟩
 
 /-- Concatenation of two markups: both sides are already safe, so nothing is
