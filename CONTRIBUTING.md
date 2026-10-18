@@ -38,9 +38,13 @@ executable twin that reads its input in place and builds a `String`:
   recursive. Numeric character references saturate just above U+10FFFF, so a
   reference with millions of digits is still linear.
 
-The fast `str.format` engine looks positional arguments up in an `Array`
-(`renderFieldA`, proved equal to `renderField` on `pos.toArray`), so a
-template of a million `{}` or `{0}` fields is linear. `%d` of text counts
+The fast `str.format` and `%` engines look positional arguments up in an
+`Array` and keyword arguments in a `Std.HashMap`, both built once per call
+(`renderFieldA`, proved equal to `renderField` on `pos.toArray` and
+`namedMap named`). `namedMap` inserts with `insertIfNew`, so the first
+binding of a repeated key wins, exactly as `List.lookup` in the
+specification (`namedMap_get`). A million `{}`, `{0}`, `{name}` or
+`%(name)s` fields are linear. `%d` of text counts
 the literal's digits with the in-place `int()` grammar (`pyIntDigitCount`,
 the `intStep` fold) before it stores any, so a 20 MB literal over CPython's
 4300-digit limit is rejected after one scan.

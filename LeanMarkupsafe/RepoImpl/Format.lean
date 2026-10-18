@@ -649,15 +649,36 @@ def renderField (pos : List FormatArg) (named : List (String × FormatArg))
     | .error e => .error e
     | .ok m => .ok (m, st')
 
-/-- `ArgRef.lookup` with the positional arguments in an `Array`: constant
-time per positional field. -/
-def ArgRef.lookupA (pos : Array FormatArg) (named : List (String × FormatArg)) :
+/-- Keyword arguments as a hash map, built once per call. The first binding
+of a key wins, as in `List.lookup` (the specification). -/
+def namedMap (named : List (String × FormatArg)) : Std.HashMap String FormatArg :=
+  named.foldl (fun m p => m.insertIfNew p.1 p.2) (Std.HashMap.emptyWithCapacity named.length)
+
+theorem namedMap_fold (l : List (String × FormatArg)) (m : Std.HashMap String FormatArg) (a : String) :
+    (l.foldl (fun m p => m.insertIfNew p.1 p.2) m)[a]? = (m[a]?).or (l.lookup a) := by
+  induction l generalizing m with
+  | nil => simp
+  | cons p l ih =>
+    rw [List.foldl_cons, ih, Std.HashMap.getElem?_insertIfNew]
+    simp only [List.lookup]
+    by_cases hk : p.1 = a
+    · subst hk
+      by_cases hm : p.1 ∈ m <;> simp [hm]
+    · have : (a == p.1) = false := by simp; exact fun h => hk h.symm
+      simp [hk, this]
+
+theorem namedMap_get (named : List (String × FormatArg)) (a : String) : (namedMap named)[a]? = named.lookup a := by
+  rw [namedMap, namedMap_fold, Std.HashMap.getElem?_emptyWithCapacity]; simp
+
+/-- `ArgRef.lookup` with the positional arguments in an `Array` and the
+keyword arguments in a hash map: constant time per field. -/
+def ArgRef.lookupA (pos : Array FormatArg) (named : Std.HashMap String FormatArg) :
     ArgRef → Option FormatArg
   | .pos i => pos[i]?
-  | .key k => named.lookup k
+  | .key k => named[k]?
 
 /-- `resolveField` with the positional arguments in an `Array`. -/
-def resolveFieldA (pos : Array FormatArg) (named : List (String × FormatArg))
+def resolveFieldA (pos : Array FormatArg) (named : Std.HashMap String FormatArg)
     (st : Numbering) (name : List Char) : Except FormatError (FormatArg × Numbering) :=
   match parseFieldName name with
   | .error e => .error e
@@ -673,7 +694,7 @@ def resolveFieldA (pos : Array FormatArg) (named : List (String × FormatArg))
         | .key k => .error (.missingKey k)
 
 /-- `renderField` with the positional arguments in an `Array`. -/
-def renderFieldA (pos : Array FormatArg) (named : List (String × FormatArg))
+def renderFieldA (pos : Array FormatArg) (named : Std.HashMap String FormatArg)
     (st : Numbering) (field : List Char) : Except FormatError (Markup × Numbering) :=
   let nf := splitField field
   match resolveFieldA pos named st nf.1 with
@@ -684,12 +705,12 @@ def renderFieldA (pos : Array FormatArg) (named : List (String × FormatArg))
     | .ok m => .ok (m, st')
 
 theorem ArgRef.lookupA_toArray (pos : List FormatArg) (named : List (String × FormatArg))
-    (r : ArgRef) : r.lookupA pos.toArray named = r.lookup pos named := by
-  cases r <;> simp [ArgRef.lookupA, ArgRef.lookup]
+    (r : ArgRef) : r.lookupA pos.toArray (namedMap named) = r.lookup pos named := by
+  cases r <;> simp [ArgRef.lookupA, ArgRef.lookup, namedMap_get]
 
 theorem renderFieldA_toArray (pos : List FormatArg) (named : List (String × FormatArg))
     (st : Numbering) (field : List Char) :
-    renderFieldA pos.toArray named st field = renderField pos named st field := by
+    renderFieldA pos.toArray (namedMap named) st field = renderField pos named st field := by
   simp only [renderFieldA, renderField, resolveFieldA, resolveField, ArgRef.lookupA_toArray]
 
 /-- The `str.format` engine on a character list. -/
@@ -795,7 +816,7 @@ theorem takeFieldAt_eq (p : s.Pos) (accRev : List Char) :
 
 /-- The field whose `{` comes just before `q`: its rendering, the numbering
 after it and the position after its `}`. -/
-def fieldAt (pos : Array FormatArg) (named : List (String × FormatArg)) (st : Numbering)
+def fieldAt (pos : Array FormatArg) (named : Std.HashMap String FormatArg) (st : Numbering)
     (q : s.Pos) : Except FormatError (Markup × Numbering × s.Pos) :=
   -- The guard is `takeFieldAt`'s own first case; stated here, it keeps the
   -- elaborator from unfolding `takeFieldAt` when `fmtGo` matches on this.
@@ -808,7 +829,7 @@ def fieldAt (pos : Array FormatArg) (named : List (String × FormatArg)) (st : N
       | .error e => .error e
       | .ok (m, st') => .ok (m, st', r)
 
-theorem fieldAt_length {pos : Array FormatArg} {named : List (String × FormatArg)} {st : Numbering}
+theorem fieldAt_length {pos : Array FormatArg} {named : Std.HashMap String FormatArg} {st : Numbering}
     {q : s.Pos} {m : Markup} {st' : Numbering} {r : s.Pos}
     (h : fieldAt pos named st q = .ok (m, st', r)) : (rest r).length < (rest q).length := by
   unfold fieldAt at h
@@ -831,7 +852,7 @@ theorem fieldAt_length {pos : Array FormatArg} {named : List (String × FormatAr
 
 /-- `formatList`, in place: append the rendering of the template text at `p`
 to `acc`. -/
-def fmtGo (pos : Array FormatArg) (named : List (String × FormatArg)) (st : Numbering)
+def fmtGo (pos : Array FormatArg) (named : Std.HashMap String FormatArg) (st : Numbering)
     (p : s.Pos) (acc : String) : Except FormatError String :=
   if h : p = s.endPos then .ok acc
   else if p.get h = '{' then
@@ -857,7 +878,7 @@ decreasing_by
 
 theorem fieldAt_eq (pos : List FormatArg) (named : List (String × FormatArg)) (st : Numbering)
     (q : s.Pos) :
-    (fieldAt pos.toArray named st q).map (fun x => (x.1, x.2.1, rest x.2.2)) =
+    (fieldAt pos.toArray (namedMap named) st q).map (fun x => (x.1, x.2.1, rest x.2.2)) =
       fieldL pos named st (rest q) := by
   have he := takeFieldAt_eq q []
   unfold fieldAt fieldL
@@ -883,7 +904,7 @@ theorem fieldAt_eq (pos : List FormatArg) (named : List (String × FormatArg)) (
 
 theorem fmtGo_eq (pos : List FormatArg) (named : List (String × FormatArg)) (st : Numbering)
     (p : s.Pos) (acc : String) :
-    (fmtGo pos.toArray named st p acc).map String.toList =
+    (fmtGo pos.toArray (namedMap named) st p acc).map String.toList =
       (formatList pos named st (rest p)).map (acc.toList ++ ·) := by
   induction p using rest_induction generalizing st acc with
   | step p ih =>
@@ -895,7 +916,7 @@ theorem fmtGo_eq (pos : List FormatArg) (named : List (String × FormatArg)) (st
       have hadv : (rest (adv (p.next h))).length < (rest p).length := by
         rw [rest_adv, List.length_tail]; omega
       have tailCase : ∀ (c : Char) (st : Numbering),
-          (fmtGo pos.toArray named st (adv (p.next h)) (acc.push c)).map String.toList =
+          (fmtGo pos.toArray (namedMap named) st (adv (p.next h)) (acc.push c)).map String.toList =
             (mapOk (c :: ·) (formatList pos named st (rest (p.next h)).tail)).map
               (acc.toList ++ ·) := by
         intro c st
@@ -937,7 +958,7 @@ end Cursor
 /-- `formatWith`, reading the template in place. -/
 def Markup.formatWithFast (t : Markup) (pos : List FormatArg)
     (named : List (String × FormatArg) := []) : Except FormatError Markup :=
-  match Cursor.fmtGo pos.toArray named .unset t.str.toSlice.startPos "" with
+  match Cursor.fmtGo pos.toArray (namedMap named) .unset t.str.toSlice.startPos "" with
   | .ok o => .ok ⟨o⟩
   | .error e => .error e
 
@@ -951,12 +972,12 @@ def Markup.formatWithFast (t : Markup) (pos : List FormatArg)
   cases h1 : formatList pos named .unset t.str.toList with
   | error e =>
     rw [h1] at he
-    cases h2 : Cursor.fmtGo pos.toArray named .unset t.str.toSlice.startPos "" with
+    cases h2 : Cursor.fmtGo pos.toArray (namedMap named) .unset t.str.toSlice.startPos "" with
     | error e' => rw [h2] at he; simp [Except.map] at he; simp [he]
     | ok o => rw [h2] at he; simp [Except.map] at he
   | ok o =>
     rw [h1] at he
-    cases h2 : Cursor.fmtGo pos.toArray named .unset t.str.toSlice.startPos "" with
+    cases h2 : Cursor.fmtGo pos.toArray (namedMap named) .unset t.str.toSlice.startPos "" with
     | error e' => rw [h2] at he; simp [Except.map] at he
     | ok o' =>
       rw [h2] at he; simp [Except.map] at he
@@ -1070,8 +1091,9 @@ As for `str.format`: `percGo` reads the template in place and appends to a
 `String`; `mod_eq_fast` (`@[csimp]`) proves it equal to `Markup.mod`. -/
 
 /-- One `%` field, given the text after its `%`: the rendering, the
-positional arguments left and the text after the field. -/
-def percStepL (map : Option (List (String × FormatArg))) (rem : List FormatArg) :
+positional arguments left and the text after the field. `map` looks a key
+up in the mapping, if the arguments are one. -/
+def percStepL (map : Option (String → Option FormatArg)) (rem : List FormatArg) :
     List Char → Except FormatError (Markup × List FormatArg × List Char)
   | [] => .error (.badTemplate "incomplete format")
   | d :: r =>
@@ -1089,7 +1111,7 @@ def percStepL (map : Option (List (String × FormatArg))) (rem : List FormatArg)
             match percentConv cv with
             | .error e => .error e
             | .ok conv =>
-              match kv.lookup (String.ofList key) with
+              match kv (String.ofList key) with
               | none => .error (.missingKey (String.ofList key))
               | some a =>
                 match a.render conv with
@@ -1109,7 +1131,7 @@ def percStepL (map : Option (List (String × FormatArg))) (rem : List FormatArg)
             | .error e => .error e
             | .ok m => .ok (m, rem', r)
 
-theorem percStepL_length {map : Option (List (String × FormatArg))} {rem rem' : List FormatArg}
+theorem percStepL_length {map : Option (String → Option FormatArg)} {rem rem' : List FormatArg}
     {l r : List Char} {m : Markup} (h : percStepL map rem l = .ok (m, rem', r)) :
     r.length < l.length := by
   unfold percStepL at h
@@ -1147,7 +1169,7 @@ theorem percStepL_length {map : Option (List (String × FormatArg))} {rem rem' :
 theorem percentList_pct (map : Option (List (String × FormatArg))) (rem : List FormatArg)
     (l : List Char) :
     percentList map rem ('%' :: l) =
-      match percStepL map rem l with
+      match percStepL (map.map fun kv k => kv.lookup k) rem l with
       | .error e => .error e
       | .ok (m, rem', r) => mapOk (m.str.toList ++ ·) (percentList map rem' r) := by
   rw [percentList.eq_def]
@@ -1173,7 +1195,7 @@ theorem percentList_pct (map : Option (List (String × FormatArg))) (rem : List 
             cases map with
             | none => rfl
             | some kv =>
-              simp only
+              simp only [Option.map_some]
               cases percentConv cv with
               | error e => rfl
               | ok conv =>
@@ -1189,7 +1211,7 @@ theorem percentList_pct (map : Option (List (String × FormatArg))) (rem : List 
         | ok conv =>
           simp only
           cases map with
-          | some _ => rfl
+          | some _ => simp
           | none =>
             simp only
             cases rem with
@@ -1227,7 +1249,7 @@ theorem takeKeyAt_eq (p : s.Pos) (accRev : List Char) :
         cases takeKey (rest (p.next h)) <;> simp
 
 /-- `percStepL`, in place. -/
-def percStep (map : Option (List (String × FormatArg))) (rem : List FormatArg) (q : s.Pos) :
+def percStep (map : Option (Std.HashMap String FormatArg)) (rem : List FormatArg) (q : s.Pos) :
     Except FormatError (Markup × List FormatArg × s.Pos) :=
   if hq : q = s.endPos then .error (.badTemplate "incomplete format")
   else if q.get hq = '%' then .ok (⟨"%"⟩, rem, q.next hq)
@@ -1243,7 +1265,7 @@ def percStep (map : Option (List (String × FormatArg))) (rem : List FormatArg) 
           match percentConv (r'.get hr) with
           | .error e => .error e
           | .ok conv =>
-            match kv.lookup (String.ofList key) with
+            match kv[String.ofList key]? with
             | none => .error (.missingKey (String.ofList key))
             | some a =>
               match a.render conv with
@@ -1263,10 +1285,10 @@ def percStep (map : Option (List (String × FormatArg))) (rem : List FormatArg) 
           | .error e => .error e
           | .ok m => .ok (m, rem', q.next hq)
 
-theorem percStep_eq (map : Option (List (String × FormatArg))) (rem : List FormatArg)
+theorem percStep_eq (map : Option (Std.HashMap String FormatArg)) (rem : List FormatArg)
     (q : s.Pos) :
     (percStep map rem q).map (fun x => (x.1, x.2.1, rest x.2.2)) =
-      percStepL map rem (rest q) := by
+      percStepL (map.map fun M k => M[k]?) rem (rest q) := by
   unfold percStep
   split
   · subst_vars; simp [rest_endPos, percStepL, Except.map]
@@ -1302,12 +1324,12 @@ theorem percStep_eq (map : Option (List (String × FormatArg))) (rem : List Form
               cases map with
               | none => simp [Except.map]
               | some kv =>
-                simp only
+                simp only [Option.map_some]
                 cases percentConv (r'.get hr) with
                 | error e => simp [Except.map]
                 | ok conv =>
                   simp only
-                  cases kv.lookup (String.ofList key) with
+                  cases kv[String.ofList key]? with
                   | none => simp [Except.map]
                   | some a =>
                     simp only
@@ -1327,7 +1349,7 @@ theorem percStep_eq (map : Option (List (String × FormatArg))) (rem : List Form
               simp only
               cases a.render conv <;> simp [Except.map]
 
-theorem percStep_length {map : Option (List (String × FormatArg))} {rem rem' : List FormatArg}
+theorem percStep_length {map : Option (Std.HashMap String FormatArg)} {rem rem' : List FormatArg}
     {q r : s.Pos} {m : Markup} (h : percStep map rem q = .ok (m, rem', r)) :
     (rest r).length < (rest q).length := by
   have he := percStep_eq map rem q
@@ -1336,7 +1358,7 @@ theorem percStep_length {map : Option (List (String × FormatArg))} {rem rem' : 
 
 /-- `percentList`, in place: append the rendering of the template text at
 `p` to `acc`. -/
-def percGo (map : Option (List (String × FormatArg))) (rem : List FormatArg) (p : s.Pos)
+def percGo (map : Option (Std.HashMap String FormatArg)) (rem : List FormatArg) (p : s.Pos)
     (acc : String) : Except FormatError String :=
   if h : p = s.endPos then
     if map.isNone ∧ ¬ rem.isEmpty then .error .notAllConverted else .ok acc
@@ -1354,21 +1376,23 @@ decreasing_by
 
 theorem percGo_eq (map : Option (List (String × FormatArg))) (rem : List FormatArg) (p : s.Pos)
     (acc : String) :
-    (percGo map rem p acc).map String.toList =
+    (percGo (map.map namedMap) rem p acc).map String.toList =
       (percentList map rem (rest p)).map (acc.toList ++ ·) := by
   induction p using rest_induction generalizing rem acc with
   | step p ih =>
     rw [percGo]
     split
     · subst_vars; rw [rest_endPos, percentList]
-      split <;> simp [Except.map]
+      cases map <;> by_cases hr : rem = [] <;> simp_all [Except.map]
     · rename_i h
       have hlt := rest_next_length p h
       rw [rest_next p h]
       by_cases hc : p.get h = '%'
       · rw [hc, percentList_pct]
         simp only [ite_true]
-        have he := percStep_eq map rem (p.next h)
+        have he := percStep_eq (map.map namedMap) rem (p.next h)
+        rw [show (map.map namedMap).map (fun M k => M[k]?) = map.map fun kv k => kv.lookup k by
+          cases map <;> simp [namedMap_get]] at he
         split
         · rename_i e hs
           rw [hs] at he; simp only [Except.map] at he; rw [← he]; rfl
@@ -1391,14 +1415,14 @@ end Cursor
 def Markup.modFast (t : Markup) (args : PercentArgs) : Except FormatError Markup :=
   let r := match args with
     | .tuple xs => Cursor.percGo none xs t.str.toSlice.startPos ""
-    | .mapping kv => Cursor.percGo (some kv) [] t.str.toSlice.startPos ""
+    | .mapping kv => Cursor.percGo (some (namedMap kv)) [] t.str.toSlice.startPos ""
   match r with
   | .ok o => .ok ⟨o⟩
   | .error e => .error e
 
 theorem percGo_start (map : Option (List (String × FormatArg))) (rem : List FormatArg)
     (t : String) :
-    (Cursor.percGo map rem t.toSlice.startPos "").map String.toList =
+    (Cursor.percGo (map.map namedMap) rem t.toSlice.startPos "").map String.toList =
       percentList map rem t.toList := by
   have he := Cursor.percGo_eq map rem t.toSlice.startPos ""
   rw [Cursor.rest_startPos] at he
