@@ -58,18 +58,22 @@ be a Hoare triple over a heap.
   (exact formula), `softStr_markup`, `escapeSilent_spec`. `escape_injective`
   is `Codec.encode_injective`. `escape_unescape` is proved directly: the
   codec law gives only the decode-after-encode direction.
-* `VerifiedClosure`: `concat_markup_markup`, `concat_escapes`,
+* `VerifiedClosure` (`formatWith_closed` and `format_closed` among them): `concat_markup_markup`, `concat_escapes`,
   `concat_string_closed`, `join_closed`, `join_markup_closed`,
   `format_closed`, `mod_closed`, `argsSafe_proof`.
 * `VerifiedStripTags`: `striptags_no_tags`, `removeTags_no_lt`, `striptags_eq`.
-* `VerifiedInterpolation`: `format_interpolates`, `mod_tuple_interpolates`,
+* `VerifiedInterpolation`: `formatWith_interpolates`, `mod_tuple_interpolates`,
   `mod_mapping_interpolates` (for any template, trusted HTML included: the
   output is the template's segments with literals copied, `{{`/`}}`/`%%`
   unquoted, and the `i`-th field replaced by the rendering of the argument
   `fieldRefs` assigns it: automatic fields take positions 0, 1, ... in
   order, `{3}` position 3, `{name}`/`%(name)s` a keyword; a `%` tuple is
-  used up exactly), `string_arg_rendering`, and `format_strings` (string
+  used up exactly), `string_arg_rendering`, and `formatWith_strings` (string
   arguments: one `escape s` per field, `s` the string that field refers to).
+  The same statements for `Markup.format` as users call it,
+  `format_interpolates`, `format_closed`, `format_strings` and
+  `format_keywords`, follow from `Markup.format_eq_formatWith` (`format`
+  passes `posOf args` and `namedOf args` to `formatWith`).
 
 The template theory (`Proofs/Template.lean`) is general: `fill_escaped`
 says filling an escaped template whose delimiters are token boundaries with
@@ -126,6 +130,10 @@ Listed here with the reason, and in `docs/traceability.toml` with
 * **`%d` of text** parses it as Python `int()` does (whitespace, sign,
   ASCII digits, single underscores); non-ASCII digits are rejected. `%r`,
   `%a`, `%c` and the float conversions are not supported.
+* **Raising variants are opt-in.** `Markup.format!` (panics where upstream
+  raises) lives in `LeanMarkupsafe.Raising`, which `import LeanMarkupsafe`
+  does not pull in and nothing in the library uses; the gate checks it
+  separately.
 * **A Lean list on the right of `%` or in `format` is the argument tuple.**
   Python's `Markup('%s') % ['<a>']` formats the list's repr as one value
   (`[&#39;&lt;a&gt;&#39;]`); in Lean `% ["<a>"]` gives `&lt;a&gt;`. A Lean

@@ -22,7 +22,9 @@ jobs:
       - uses: leanprover/lean-action@v1
         with: { test: false, lint: false }
       - name: Verification gate (axioms, sorry/admit, partial, unsafe, implemented_by, extern)
-        run: lake env lean --run scripts/Axioms.lean LeanMarkupsafe
+        run: |
+          lake env lean --run scripts/Axioms.lean LeanMarkupsafe
+          lake env lean --run scripts/Axioms.lean LeanMarkupsafe.Raising
       - name: Property tests
         run: lake exe props
       - name: Conformance

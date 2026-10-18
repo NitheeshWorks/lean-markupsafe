@@ -429,16 +429,14 @@ instance {α : Type u} [ToPercentArgs α] : HMod Markup α (Except FormatError M
 keyword arguments, use `formatWith`. -/
 def Markup.format {α : Type u} [ToPercentArgs α] (t : Markup) (args : α) :
     Except FormatError Markup :=
-  match ToPercentArgs.toPercentArgs args with
-  | .tuple xs => t.formatWith xs []
-  | .mapping kv => t.formatWith [] kv
+  let a := ToPercentArgs.toPercentArgs args
+  t.formatWith a.pos a.named
 
-/-- `format` where a failure is a programming error, as upstream raises:
-panics on a malformed template or a missing argument. For use where the
-result must be `Markup`, such as a `HasHtml` instance. -/
-def Markup.format! {α : Type u} [ToPercentArgs α] (t : Markup) (args : α) : Markup :=
-  match t.format args with
-  | .ok m => m
-  | .error e => panic! (toString e)
+/-- `format` is `formatWith` on the arguments' positional and keyword
+lists, so every theorem about `formatWith` is a theorem about `format`. -/
+theorem Markup.format_eq_formatWith {α : Type u} [ToPercentArgs α] (t : Markup) (args : α) :
+    t.format args =
+      t.formatWith (ToPercentArgs.toPercentArgs args).pos (ToPercentArgs.toPercentArgs args).named :=
+  rfl
 
 end LeanMarkupsafe

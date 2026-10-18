@@ -8,7 +8,7 @@ interpolation engines instantiate:
 
 * `Forall₂` helpers;
 * `fill_escaped`: filling an escaped template whose delimiters are token
-  boundaries with escaped renderings gives escaped text. `format_closed` and
+  boundaries with escaped renderings gives escaped text. `formatWith_closed` and
   `mod_closed` are its two instances.
 -/
 

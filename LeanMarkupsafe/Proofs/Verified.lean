@@ -62,8 +62,8 @@ structure VerifiedClosure where
   joinClosed : Spec.joinClosed
   /-- `join_markup_closed`. -/
   joinMarkupClosed : Spec.joinMarkupClosed
-  /-- `format_closed`. -/
-  formatClosed : Spec.formatClosed
+  /-- `formatWith_closed`. -/
+  formatWithClosed : Spec.formatWithClosed
   /-- `mod_closed`. -/
   modClosed : Spec.modClosed
   /-- `argsSafe_proof`. -/
@@ -75,7 +75,7 @@ theorem theVerifiedClosure : VerifiedClosure where
   concatStringClosed := concat_string_closed
   joinClosed := join_closed
   joinMarkupClosed := join_markup_closed
-  formatClosed := format_closed
+  formatWithClosed := formatWith_closed
   modClosed := mod_closed
   argsSafe := argsSafe_proof
 
@@ -96,6 +96,8 @@ theorem theVerifiedStripTags : VerifiedStripTags where
 /-- What `format` and `%` compute for any template, trusted HTML included
 (`Proofs/Provenance.lean`). -/
 structure VerifiedInterpolation where
+  /-- `formatWith_interpolates`. -/
+  formatWith : Spec.formatWithInterpolates
   /-- `format_interpolates`. -/
   format : Spec.formatInterpolates
   /-- `mod_tuple_interpolates`. -/
@@ -104,14 +106,21 @@ structure VerifiedInterpolation where
   modMapping : Spec.modMappingInterpolates
   /-- `string_arg_rendering`. -/
   stringArg : Spec.stringArgRendering
+  /-- `formatWith_strings`. -/
+  formatWithStrings : Spec.formatWithStrings
   /-- `format_strings`. -/
   formatStrings : Spec.formatStrings
+  /-- `format_keywords`. -/
+  formatKeywords : Spec.formatKeywords
 
 theorem theVerifiedInterpolation : VerifiedInterpolation where
+  formatWith := formatWith_interpolates
   format := format_interpolates
   modTuple := mod_tuple_interpolates
   modMapping := mod_mapping_interpolates
   stringArg := string_arg_rendering
+  formatWithStrings := formatWith_strings
   formatStrings := format_strings
+  formatKeywords := format_keywords
 
 end LeanMarkupsafe

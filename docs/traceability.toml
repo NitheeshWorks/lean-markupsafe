@@ -111,8 +111,8 @@ id = "format"
 upstream = "tests/test_markupsafe.py::test_format"
 title = "Markup.format / format_map escape every argument; invariant closed under format"
 status = "implemented"
-realises = ["LeanMarkupsafe.Markup.format", "LeanMarkupsafe.Markup.formatWith", "LeanMarkupsafe.Markup.format!", "LeanMarkupsafe.Markup.formatMap", "LeanMarkupsafe.formatList", "LeanMarkupsafe.API.format"]
-theorem = ["LeanMarkupsafe.format_closed", "LeanMarkupsafe.fill_escaped", "LeanMarkupsafe.argsSafe_proof"]
+realises = ["LeanMarkupsafe.Markup.format", "LeanMarkupsafe.Markup.formatWith", "LeanMarkupsafe.Markup.formatMap", "LeanMarkupsafe.formatList", "LeanMarkupsafe.API.format"]
+theorem = ["LeanMarkupsafe.format_closed", "LeanMarkupsafe.formatWith_closed", "LeanMarkupsafe.Markup.format_eq_formatWith", "LeanMarkupsafe.fill_escaped", "LeanMarkupsafe.argsSafe_proof"]
 test = ["tests/Conformance.lean::format[named]", "tests/Conformance.lean::format_map", "tests/Conformance.lean::formatting_empty", "tests/Conformance.lean::formatting_with_objects"]
 
 [[requirement]]
@@ -222,7 +222,7 @@ upstream = "tests/test_markupsafe.py::test_string_interpolation"
 title = "format/% on any (trusted HTML) template keep its literal text and replace each field by the rendering of the argument it names (positional in order, explicit index, keyword); string arguments appear as escape s"
 status = "implemented"
 realises = ["LeanMarkupsafe.Seg", "LeanMarkupsafe.Interpolates", "LeanMarkupsafe.InterpolatesAll", "LeanMarkupsafe.fieldRefs", "LeanMarkupsafe.API.formatTrusted", "LeanMarkupsafe.API.formatStrings", "LeanMarkupsafe.API.modTrusted", "LeanMarkupsafe.API.modStrings", "LeanMarkupsafe.API.modMappingTrusted"]
-theorem = ["LeanMarkupsafe.format_interpolates", "LeanMarkupsafe.mod_tuple_interpolates", "LeanMarkupsafe.mod_mapping_interpolates", "LeanMarkupsafe.string_arg_rendering", "LeanMarkupsafe.format_strings", "LeanMarkupsafe.fill_escaped"]
+theorem = ["LeanMarkupsafe.format_interpolates", "LeanMarkupsafe.formatWith_interpolates", "LeanMarkupsafe.format_keywords", "LeanMarkupsafe.formatWith_strings", "LeanMarkupsafe.mod_tuple_interpolates", "LeanMarkupsafe.mod_mapping_interpolates", "LeanMarkupsafe.string_arg_rendering", "LeanMarkupsafe.format_strings", "LeanMarkupsafe.fill_escaped"]
 test = ["tests/Conformance.lean::trusted_template_provenance"]
 
 [[requirement]]

@@ -232,8 +232,8 @@ def joinMarkupClosed : Prop :=
 
 /-- `format` of an escaped-text template with safe arguments is escaped.
 This covers templates that are themselves escaped text only (no raw `<`);
-for trusted HTML templates see `formatInterpolates`. -/
-def formatClosed : Prop :=
+for trusted HTML templates see `formatWithInterpolates`. -/
+def formatWithClosed : Prop :=
   ∀ (t : Markup) (pos : List FormatArg) (named : List (String × FormatArg)) (r : Markup),
     IsEscaped t.str → (∀ a ∈ pos, a.Safe) → (∀ p ∈ named, p.2.Safe) →
     t.formatWith pos named = .ok r → IsEscaped r.str
@@ -271,10 +271,10 @@ def escapeSilentSpec : Prop :=
   escapeSilent (none : Option String) = Markup.empty ∧
     ∀ s : String, escapeSilent (some s) = escape s
 
-/-- `format_interpolates`: for any template, trusted HTML included, a
+/-- `formatWith_interpolates`: for any template, trusted HTML included, a
 successful `format` is the template with each field replaced by the
 rendering of the argument it refers to. -/
-def formatInterpolates : Prop :=
+def formatWithInterpolates : Prop :=
   ∀ (t : Markup) (pos : List FormatArg) (named : List (String × FormatArg)) (r : Markup),
     t.formatWith pos named = .ok r → Interpolates BraceSeg pos named t r
 
@@ -296,15 +296,61 @@ def stringArgRendering : Prop :=
     (c ≠ .percentInt → m = escape s) ∧
     (c = .percentInt → ∃ i, parsePyInt s = some i ∧ m = escape (toString i))
 
-/-- `format_strings`: formatting any template with string arguments
+/-- `formatWith_strings`: formatting any template with string arguments
 replaces each field by `escape` of the string it refers to, and changes
 nothing else. -/
-def formatStrings : Prop :=
+def formatWithStrings : Prop :=
   ∀ (t : Markup) (ss : List String) (kv : List (String × String)) (r : Markup),
     t.formatWith (ss.map .ofString) (kv.map fun p => (p.1, .ofString p.2)) = .ok r →
     ∃ segs args, (∀ s ∈ segs, BraceSeg s) ∧ printSegs segs = t.str.toList ∧
       args.length = fieldCount segs ∧
       Forall₂ (fun rc s => rc.1.lookupStr ss kv = some s) (fieldRefs segs) args ∧
+      r.str = String.ofList (fillSegs segs (args.map escape))
+
+/-! ### The same, for `format` as users call it
+
+`Markup.format t args` is `formatWith` on the arguments' positional and
+keyword lists (`Markup.format_eq_formatWith`), so each statement above holds
+for it with those lists. -/
+
+/-- The positional arguments `format` passes for `args`. -/
+abbrev posOf {α : Type} [ToPercentArgs α] (args : α) : List FormatArg :=
+  (ToPercentArgs.toPercentArgs args).pos
+
+/-- The keyword arguments `format` passes for `args`. -/
+abbrev namedOf {α : Type} [ToPercentArgs α] (args : α) : List (String × FormatArg) :=
+  (ToPercentArgs.toPercentArgs args).named
+
+/-- `format_interpolates`: for any template, trusted HTML included, a
+successful `t.format args` is the template with each field replaced by the
+rendering of the argument it refers to. -/
+def formatInterpolates : Prop :=
+  ∀ {α : Type} [ToPercentArgs α] (t : Markup) (args : α) (r : Markup),
+    t.format args = .ok r → Interpolates BraceSeg (posOf args) (namedOf args) t r
+
+/-- `format_closed`: `format` of an escaped-text template with safe
+arguments is escaped. -/
+def formatClosed : Prop :=
+  ∀ {α : Type} [ToPercentArgs α] (t : Markup) (args : α) (r : Markup),
+    IsEscaped t.str → (∀ a ∈ posOf args, a.Safe) → (∀ p ∈ namedOf args, p.2.Safe) →
+    t.format args = .ok r → IsEscaped r.str
+
+/-- `format_strings`: `t.format ss` with a list of strings replaces each
+field by `escape` of the string it refers to, and changes nothing else. -/
+def formatStrings : Prop :=
+  ∀ (t : Markup) (ss : List String) (r : Markup), t.format ss = .ok r →
+    ∃ segs args, (∀ s ∈ segs, BraceSeg s) ∧ printSegs segs = t.str.toList ∧
+      args.length = fieldCount segs ∧
+      Forall₂ (fun rc s => rc.1.lookupStr ss [] = some s) (fieldRefs segs) args ∧
+      r.str = String.ofList (fillSegs segs (args.map escape))
+
+/-- `format_keywords`: the same with keyword string arguments,
+`t.format [("name", s), ...]`. -/
+def formatKeywords : Prop :=
+  ∀ (t : Markup) (kv : List (String × String)) (r : Markup), t.format kv = .ok r →
+    ∃ segs args, (∀ s ∈ segs, BraceSeg s) ∧ printSegs segs = t.str.toList ∧
+      args.length = fieldCount segs ∧
+      Forall₂ (fun rc s => rc.1.lookupStr [] kv = some s) (fieldRefs segs) args ∧
       r.str = String.ofList (fillSegs segs (args.map escape))
 
 end Spec

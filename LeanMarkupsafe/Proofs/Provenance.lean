@@ -3,13 +3,13 @@ import LeanMarkupsafe.Proofs.Closure
 /-!
 # Proofs: what `format` and `%` compute, for any template
 
-`format_interpolates`, `mod_tuple_interpolates` and `mod_mapping_interpolates`
+`formatWith_interpolates`, `mod_tuple_interpolates` and `mod_mapping_interpolates`
 say that a successful interpolation of any template, trusted HTML included,
 is the template's segments with literals copied, quotes unquoted, and the
 `i`-th field replaced by the rendering of the argument it refers to
 (`fieldRefs`): automatic fields take positions in order, `{3}` position 3,
-`{name}`/`%(name)s` a keyword. `format_strings` specialises this to string
-arguments, which appear as `escape s`. `format_closed` and `mod_closed` are
+`{name}`/`%(name)s` a keyword. `formatWith_strings` specialises this to string
+arguments, which appear as `escape s`. `formatWith_closed` and `mod_closed` are
 instances of `fill_escaped`.
 -/
 
@@ -184,8 +184,8 @@ theorem formatList_interpolates :
 
 end Format
 
-/-- `format_interpolates`. -/
-theorem format_interpolates : Spec.formatInterpolates := by
+/-- `formatWith_interpolates`. -/
+theorem formatWith_interpolates : Spec.formatWithInterpolates := by
   intro t pos named r h
   unfold Markup.formatWith at h
   split at h
@@ -410,11 +410,11 @@ theorem fieldRefsFrom_length : ∀ (n : Nat) (segs : List Seg),
   | n, .quote _ _ :: r => by simp [fieldRefsFrom, fieldCount, fieldRefsFrom_length n r]
   | n, .field _ fn _ :: r => by simp [fieldRefsFrom, fieldCount, fieldRefsFrom_length (fn.next n) r]
 
-/-- `format_strings`: with string arguments, each field becomes `escape` of
+/-- `formatWith_strings`: with string arguments, each field becomes `escape` of
 the string it refers to. -/
-theorem format_strings : Spec.formatStrings := by
+theorem formatWith_strings : Spec.formatWithStrings := by
   intro t ss kv r h
-  obtain ⟨segs, ms, hwf, hp, hf, hr⟩ := format_interpolates _ _ _ _ h
+  obtain ⟨segs, ms, hwf, hp, hf, hr⟩ := formatWith_interpolates _ _ _ _ h
   have hf' := Forall₂.imp_mem (S := fun rc m => (∃ spec, rc.2 = .brace spec) ∧ Renders _ _ rc m)
     (fun rc hrc m hm => ⟨fieldRefsFrom_brace 0 segs hwf rc hrc, hm⟩) hf
   obtain ⟨args, hargs, rfl⟩ := Forall₂.factor (P := fun rc s => rc.1.lookupStr ss kv = some s)
@@ -468,9 +468,9 @@ theorem fills_escaped {pos : List FormatArg} {named : List (String × FormatArg)
   · exact hnamed (k, a) hk _ _ hr
 
 /-- `format` of an escaped-text template with safe arguments is escaped. -/
-theorem format_closed : Spec.formatClosed := by
+theorem formatWith_closed : Spec.formatWithClosed := by
   intro t pos named r ht hpos hnamed h
-  obtain ⟨segs, ms, hwf, hp, hf, hr⟩ := format_interpolates _ _ _ _ h
+  obtain ⟨segs, ms, hwf, hp, hf, hr⟩ := formatWith_interpolates _ _ _ _ h
   show Esc r.str.toList
   rw [hr]
   exact fill_escaped (fun s hs => (hwf s hs).delimited) (fills_escaped hpos hnamed hf) (hp ▸ ht)
@@ -487,5 +487,29 @@ theorem mod_closed : Spec.modClosed := by
     show Esc r.str.toList
     rw [hr]
     exact fill_escaped (fun s hs => (hwf s hs).delimited) (fills_escaped (by simp) hkv hf) (hp ▸ ht)
+
+/-! ## The same, for `format` -/
+
+/-- `format_interpolates`. -/
+theorem format_interpolates : Spec.formatInterpolates := by
+  intro α _ t args r h
+  rw [Markup.format_eq_formatWith] at h
+  exact formatWith_interpolates _ _ _ _ h
+
+/-- `format_closed`. -/
+theorem format_closed : Spec.formatClosed := by
+  intro α _ t args r ht hpos hnamed h
+  rw [Markup.format_eq_formatWith] at h
+  exact formatWith_closed _ _ _ _ ht hpos hnamed h
+
+/-- `format_strings`. -/
+theorem format_strings : Spec.formatStrings := by
+  intro t ss r h
+  exact formatWith_strings t ss [] r h
+
+/-- `format_keywords`. -/
+theorem format_keywords : Spec.formatKeywords := by
+  intro t kv r h
+  exact formatWith_strings t [] kv r h
 
 end LeanMarkupsafe

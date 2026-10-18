@@ -14,6 +14,7 @@ lake build
 
 echo "== verification gate =="
 lake env lean --run scripts/Axioms.lean "$LIB"
+lake env lean --run scripts/Axioms.lean "$LIB.Raising"   # the opt-in module the root does not import
 
 [[ "${1:-}" == "--quick" ]] && exit 0
 

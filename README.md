@@ -91,9 +91,10 @@ All in `LeanMarkupsafe/Proofs/`, bundled in `Proofs/Verified.lean`:
 | `escape_markup_id` | markup is not escaped again | `Markup.escape m = m` |
 | `escape_length` | exact length | `(escape s).str.length = s.length + 4·#& + 3·#< + 3·#> + 4·#" + 4·#'` |
 | `concat_markup_markup`, `join_closed`, … | concatenation and `join` keep text escaped | `IsEscaped a.str → IsEscaped b.str → IsEscaped (a ++ b).str` |
-| `format_interpolates` | for any template, `format` replaces the `i`-th field by the rendering of the argument it names, and changes nothing else | `t.format pos named = .ok r → Interpolates BraceSeg pos named t r` |
+| `format_eq_formatWith` | `format` passes its arguments' positional and keyword lists to `formatWith` | `t.format args = t.formatWith (posOf args) (namedOf args)` |
+| `format_interpolates` | for any template, `format` replaces the `i`-th field by the rendering of the argument it names, and changes nothing else | `t.format args = .ok r → Interpolates BraceSeg (posOf args) (namedOf args) t r` |
 | `mod_tuple_interpolates`, `mod_mapping_interpolates` | the same for `%`; a tuple is used up exactly | `t.mod (.tuple xs) = .ok r → InterpolatesAll PercentSeg xs t r` |
-| `format_strings` | with string arguments every field becomes `escape` of its string | `r.str = String.ofList (fillSegs segs (args.map escape))` |
+| `format_strings`, `format_keywords` | with string arguments (`t.format ss`, `t.format [("k", s)]`) every field becomes `escape` of the string it names | `t.format ss = .ok r → ∃ segs args, … ∧ r.str = String.ofList (fillSegs segs (args.map escape))` |
 | `fill_escaped` → `format_closed`, `mod_closed` | an escaped template with safe arguments gives escaped text | `IsEscaped t.str → … → IsEscaped r.str` |
 | `striptags_no_tags` | no complete tag survives tag removal | `NoCompleteTag (removeTags l)` |
 

@@ -6,6 +6,7 @@ defaultTargets = ["LeanMarkupsafe", "Examples", "props", "conformance"]
 # total function and the proof surface; see CONTRIBUTING.md.
 [[lean_lib]]
 name = "LeanMarkupsafe"
+roots = ["LeanMarkupsafe", "LeanMarkupsafe.Raising"]
 
 # Property tests for what is tested rather than proved. No dependencies, runs
 # in well under a second: `lake exe props [seed]`.

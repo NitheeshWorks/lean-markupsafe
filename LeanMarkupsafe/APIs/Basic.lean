@@ -81,7 +81,7 @@ def format (t : Escaped) (pos : List SafeArg) (named : List (String × SafeArg) 
       {m : Escaped // t.val.formatWith (pos.map Subtype.val) (named.map fun p => (p.1, p.2.val))
         = .ok m.val} :=
   match h : t.val.formatWith (pos.map Subtype.val) (named.map fun p => (p.1, p.2.val)) with
-  | .ok r => .ok ⟨⟨r, format_closed _ _ _ _ t.property safe_of_mem safe_of_mem_named h⟩, by first | exact h | rfl⟩
+  | .ok r => .ok ⟨⟨r, formatWith_closed _ _ _ _ t.property safe_of_mem safe_of_mem_named h⟩, by first | exact h | rfl⟩
   | .error e => .error e
 
 /-- `%` with a tuple of safe arguments on an escaped template. -/
@@ -111,7 +111,7 @@ field replaced by the rendering of the argument it refers to. -/
 def formatTrusted (t : Markup) (pos : List FormatArg) (named : List (String × FormatArg) := []) :
     Except FormatError {r : Markup // Interpolates BraceSeg pos named t r} :=
   match h : t.formatWith pos named with
-  | .ok r => .ok ⟨r, format_interpolates t pos named r h⟩
+  | .ok r => .ok ⟨r, formatWith_interpolates t pos named r h⟩
   | .error e => .error e
 
 /-- `str.format` on a trusted template with string arguments: the result is
@@ -124,7 +124,7 @@ def formatStrings (t : Markup) (ss : List String) (kv : List (String × String) 
         Forall₂ (fun rc s => rc.1.lookupStr ss kv = some s) (fieldRefs segs) args ∧
         r.str = String.ofList (fillSegs segs (args.map LeanMarkupsafe.escape))} :=
   match h : t.formatWith (ss.map .ofString) (kv.map fun p => (p.1, .ofString p.2)) with
-  | .ok r => .ok ⟨r, format_strings t ss kv r h⟩
+  | .ok r => .ok ⟨r, formatWith_strings t ss kv r h⟩
   | .error e => .error e
 
 /-- `%` with a tuple on a trusted template: each field is replaced by the

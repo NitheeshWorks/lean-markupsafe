@@ -148,6 +148,16 @@ inductive PercentArgs where
   | tuple (args : List FormatArg)
   | mapping (args : List (String × FormatArg))
 
+/-- The positional arguments: the tuple, or none for a mapping. -/
+def PercentArgs.pos : PercentArgs → List FormatArg
+  | .tuple xs => xs
+  | .mapping _ => []
+
+/-- The keyword arguments: the mapping, or none for a tuple. -/
+def PercentArgs.named : PercentArgs → List (String × FormatArg)
+  | .tuple _ => []
+  | .mapping kv => kv
+
 /-- The result of upstream `soft_str`: a `Markup` stays a `Markup` (so it will
 not be escaped again), anything else becomes plain text. -/
 inductive SoftString where

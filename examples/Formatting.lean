@@ -1,4 +1,5 @@
 import LeanMarkupsafe
+import LeanMarkupsafe.Raising
 open LeanMarkupsafe
 
 /-!
@@ -7,8 +8,9 @@ open LeanMarkupsafe
 Port of markupsafe `docs/formatting.rst`, block by block. Python's
 `__html_format__` and `__html__` methods are functions in the `User`
 namespace, registered as a `HasHtmlFormat` instance.
-`__html__` must return markup, so it uses `format!`, which raises (panics)
-on a bad template as Python's `format` would.
+`__html__` must return markup, so it uses `format!` (the opt-in
+`LeanMarkupsafe.Raising`), which panics on a bad template where Python's
+`format` raises.
 -/
 
 namespace Examples.Formatting
