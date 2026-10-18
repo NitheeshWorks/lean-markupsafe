@@ -20,7 +20,9 @@ lake env lean LeanMarkupsafe/Proofs/Foo.lean     # check one file (never bare `l
 
 ## Rules that CI enforces
 
-* No `sorry`, no `partial def`, no `unsafe` under `LeanMarkupsafe/`.
+* `scripts/Axioms.lean` checks every declaration (theorems and definitions):
+  no `sorry`/`admit`, no `partial def` (derived `Repr` printers excepted), no
+  `unsafe`, no `@[implemented_by]`/`@[extern]`, no `native_decide`/`bv_decide`, under `LeanMarkupsafe/`.
 * Every theorem reaches only `propext`, `Quot.sound`, `Classical.choice`.
 * Every symbol in `docs/traceability.toml` resolves; every test path exists.
 
