@@ -32,7 +32,7 @@ open LeanMarkupsafe
 
 -- methods and operators escape their arguments
 def template := Markup.mk "Hello <em>{name}</em>"
-#eval template.format [] [("name", "\"World\"")]
+#eval template.format [("name", "\"World\"")]
 -- Except.ok (Markup.mk "Hello <em>&#34;World&#34;</em>")
 
 #eval Markup.mk "<em>Hello</em> " ++ "<foo>"
@@ -45,11 +45,17 @@ def template := Markup.mk "Hello <em>{name}</em>"
 -- "Main » About"
 ```
 
+More examples, ported one for one from MarkupSafe's docs pages, are in
+[`examples/`](examples/README.md).
+
 A type opts into safe rendering with `instance : HasHtml T := ⟨fun t => ...⟩`
 (upstream `__html__`), or `HasHtmlFormat` for `__html_format__`.
 `Markup.escape`, `++`, `join`, `format` and `%` then use its rendering
-instead of escaping it. `format` and `%` return `Except FormatError Markup`
-where upstream raises.
+instead of escaping it. `Markup.of x` is upstream's `Markup(x)`. `format`
+and `%` return `Except FormatError Markup` where upstream raises; `format!`
+panics instead, for code that must return `Markup`. `t.format` takes a value,
+a tuple, a list, or a list of `(key, value)` pairs (keyword arguments);
+`formatWith pos named` takes both at once.
 
 ## What a `Markup` value means
 

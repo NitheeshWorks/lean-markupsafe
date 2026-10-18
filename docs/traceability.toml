@@ -111,7 +111,7 @@ id = "format"
 upstream = "tests/test_markupsafe.py::test_format"
 title = "Markup.format / format_map escape every argument; invariant closed under format"
 status = "implemented"
-realises = ["LeanMarkupsafe.Markup.format", "LeanMarkupsafe.Markup.formatMap", "LeanMarkupsafe.formatList", "LeanMarkupsafe.API.format"]
+realises = ["LeanMarkupsafe.Markup.format", "LeanMarkupsafe.Markup.formatWith", "LeanMarkupsafe.Markup.format!", "LeanMarkupsafe.Markup.formatMap", "LeanMarkupsafe.formatList", "LeanMarkupsafe.API.format"]
 theorem = ["LeanMarkupsafe.format_closed", "LeanMarkupsafe.fill_escaped", "LeanMarkupsafe.argsSafe_proof"]
 test = ["tests/Conformance.lean::format[named]", "tests/Conformance.lean::format_map", "tests/Conformance.lean::formatting_empty", "tests/Conformance.lean::formatting_with_objects"]
 
@@ -284,3 +284,29 @@ title = "format/% arguments written as plain strings, numbers and Markup; Markup
 status = "implemented"
 realises = ["LeanMarkupsafe.FormatArg.ofString", "LeanMarkupsafe.FormatArg.ofMarkup", "LeanMarkupsafe.FormatArg.ofNat", "LeanMarkupsafe.ToPercentArgs", "LeanMarkupsafe.ToArgTuple"]
 test = ["tests/Conformance.lean::readme_examples", "tests/Conformance.lean::percent_plain_values"]
+
+[[requirement]]
+id = "mod.list-is-tuple"
+upstream = "src/markupsafe/__init__.py::Markup.__mod__"
+title = "a Python list on the right of % is one value (its repr); a Lean list is the argument tuple"
+status = "deviation"
+realises = ["LeanMarkupsafe.ToPercentArgs"]
+test = ["tests/Conformance.lean::percent_list_is_tuple"]
+note = "Markup('%s') % ['<a>'] is Markup('[&#39;&lt;a&gt;&#39;]') in 3.0.4; Lean's % [\"<a>\"] is &lt;a&gt;. FormatArg has no repr."
+
+[[requirement]]
+id = "markup.of"
+upstream = "src/markupsafe/__init__.py::Markup.__new__"
+title = "Markup(obj): a string as is, __html__ objects by their rendering, anything else by str(), unescaped"
+status = "implemented"
+realises = ["LeanMarkupsafe.Markup.of", "LeanMarkupsafe.Markup.ToMarkupSafe", "LeanMarkupsafe.noneToMarkup"]
+test = ["tests/Conformance.lean::docs_escaping_markup", "tests/Conformance.lean::docs_html", "tests/Conformance.lean::docs_escaping_silent"]
+
+[[requirement]]
+id = "examples.docs"
+upstream = "docs/ (README.md, index.rst, escaping.rst, html.rst, formatting.rst)"
+title = "MarkupSafe's own docs examples, ported 1:1 and checked against MarkupSafe 3.0.4"
+status = "implemented"
+note = "Where a docs page shows a different output than 3.0.4 prints (UP-043), the ports and checks follow the package."
+realises = ["LeanMarkupsafe.escape", "LeanMarkupsafe.Markup.of", "LeanMarkupsafe.Markup.format", "LeanMarkupsafe.HasHtmlFormat"]
+test = ["examples/MANIFEST.toml", "examples/Readme.lean", "examples/Index.lean", "examples/Escaping.lean", "examples/Html.lean", "examples/Formatting.lean", "tests/Conformance.lean::docs_formatting"]

@@ -187,7 +187,7 @@ end Format
 /-- `format_interpolates`. -/
 theorem format_interpolates : Spec.formatInterpolates := by
   intro t pos named r h
-  unfold Markup.format at h
+  unfold Markup.formatWith at h
   split at h
   · rename_i o ho
     cases h

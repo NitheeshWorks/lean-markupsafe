@@ -112,7 +112,8 @@ Listed here with the reason, and in `docs/traceability.toml` with
   `Markup("<em>")` marks arbitrary HTML safe, and rendered templates are
   such values, so `Markup` is a structure and the invariant is the subtype
   `Escaped := {m : Markup // IsEscaped m.str}`.
-* **Format syntax.** `Markup.format` supports literal text, `{{`/`}}` and
+* **Format syntax.** `Markup.format` (and `formatWith`, which takes
+  positional and keyword arguments at once) supports literal text, `{{`/`}}` and
   fields `{}`, `{0}`, `{name}` with an optional `:spec` handed to the
   argument (`HasHtmlFormat` sees any spec). `Markup.mod` supports `%%`,
   `%s`, `%d`, `%i` and `%(key)s`. Attribute/index access, `!r`
@@ -125,6 +126,12 @@ Listed here with the reason, and in `docs/traceability.toml` with
 * **`%d` of text** parses it as Python `int()` does (whitespace, sign,
   ASCII digits, single underscores); non-ASCII digits are rejected. `%r`,
   `%a`, `%c` and the float conversions are not supported.
+* **A Lean list on the right of `%` or in `format` is the argument tuple.**
+  Python's `Markup('%s') % ['<a>']` formats the list's repr as one value
+  (`[&#39;&lt;a&gt;&#39;]`); in Lean `% ["<a>"]` gives `&lt;a&gt;`. A Lean
+  list plays the role of Python's tuple, which is how upstream's own
+  examples read (`% ("foo & bar",)` is `% ["foo & bar"]`). FormatArg has no
+  repr, so there is no Python-list value to format.
 * **Positional `%s` with a mapping.** Upstream `Markup("%s") % {"a": 1}`
   renders the mapping's `repr`; a `FormatArg` mapping has no `repr`, so
   this returns `FormatError.unsupported`. Mixing `%(a)s` and `%s` with a

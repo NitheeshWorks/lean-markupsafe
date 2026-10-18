@@ -75,12 +75,12 @@ private theorem safe_of_mem_named {kv : List (String × SafeArg)} :
   intro p hp; simp only [List.mem_map] at hp; obtain ⟨q, -, rfl⟩ := hp; exact q.2.property
 
 /-- `str.format` on an escaped template with safe arguments: the result is
-escaped, and it is what `Markup.format` returns. -/
+escaped, and it is what `Markup.formatWith` returns. -/
 def format (t : Escaped) (pos : List SafeArg) (named : List (String × SafeArg) := []) :
     Except FormatError
-      {m : Escaped // t.val.format (pos.map Subtype.val) (named.map fun p => (p.1, p.2.val))
+      {m : Escaped // t.val.formatWith (pos.map Subtype.val) (named.map fun p => (p.1, p.2.val))
         = .ok m.val} :=
-  match h : t.val.format (pos.map Subtype.val) (named.map fun p => (p.1, p.2.val)) with
+  match h : t.val.formatWith (pos.map Subtype.val) (named.map fun p => (p.1, p.2.val)) with
   | .ok r => .ok ⟨⟨r, format_closed _ _ _ _ t.property safe_of_mem safe_of_mem_named h⟩, by first | exact h | rfl⟩
   | .error e => .error e
 
@@ -110,7 +110,7 @@ rendering, and with string arguments each inserted piece is `escape s`. -/
 field replaced by the rendering of the argument it refers to. -/
 def formatTrusted (t : Markup) (pos : List FormatArg) (named : List (String × FormatArg) := []) :
     Except FormatError {r : Markup // Interpolates BraceSeg pos named t r} :=
-  match h : t.format pos named with
+  match h : t.formatWith pos named with
   | .ok r => .ok ⟨r, format_interpolates t pos named r h⟩
   | .error e => .error e
 
@@ -123,7 +123,7 @@ def formatStrings (t : Markup) (ss : List String) (kv : List (String × String) 
         args.length = fieldCount segs ∧
         Forall₂ (fun rc s => rc.1.lookupStr ss kv = some s) (fieldRefs segs) args ∧
         r.str = String.ofList (fillSegs segs (args.map LeanMarkupsafe.escape))} :=
-  match h : t.format (ss.map .ofString) (kv.map fun p => (p.1, .ofString p.2)) with
+  match h : t.formatWith (ss.map .ofString) (kv.map fun p => (p.1, .ofString p.2)) with
   | .ok r => .ok ⟨r, format_strings t ss kv r h⟩
   | .error e => .error e
 

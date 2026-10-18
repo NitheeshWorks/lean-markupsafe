@@ -1,0 +1,244 @@
+# Every upstream example and its Lean port (checked by
+# stack-tools/check-examples.py). MarkupSafe ships no example programs, so its
+# examples are the Python code blocks of its README and docs pages, one Lean
+# file per page. docs/escaping.rst is autodoc: its examples are the docstrings
+# it renders (escape, Markup, Markup.unescape, Markup.striptags, escape_silent,
+# soft_str), ported in examples/Escaping.lean. The checker counts every `>>> `
+# line at the start of a line as a block, so README.md and docs/index.rst have
+# one row per statement.
+
+[meta]
+upstream = "markupsafe"
+doc_pages = ["README.md", "docs/index.rst", "docs/escaping.rst", "docs/html.rst",
+  "docs/formatting.rst"]
+
+[[example]]
+upstream = "README.md#block-1 (the pycon block)"
+lean = "examples/Readme.lean"
+status = "ported"
+reason = ""
+output = "tests/Conformance.lean::readme"
+
+[[example]]
+upstream = "README.md#line-1"
+lean = "examples/Readme.lean"
+status = "ported"
+reason = ""
+output = "tests/Conformance.lean::readme"
+
+[[example]]
+upstream = "README.md#line-2"
+lean = "examples/Readme.lean"
+status = "ported"
+reason = ""
+output = "tests/Conformance.lean::readme"
+
+[[example]]
+upstream = "README.md#line-3"
+lean = "examples/Readme.lean"
+status = "ported"
+reason = ""
+output = "tests/Conformance.lean::readme"
+
+[[example]]
+upstream = "README.md#line-4"
+lean = "examples/Readme.lean"
+status = "ported"
+reason = ""
+output = "tests/Conformance.lean::readme"
+
+[[example]]
+upstream = "README.md#line-5"
+lean = "examples/Readme.lean"
+status = "ported"
+reason = ""
+output = "tests/Conformance.lean::readme"
+
+[[example]]
+upstream = "README.md#line-6"
+lean = "examples/Readme.lean"
+status = "ported"
+reason = ""
+output = "tests/Conformance.lean::readme"
+
+[[example]]
+upstream = "README.md#line-7"
+lean = "examples/Readme.lean"
+status = "ported"
+reason = ""
+output = "tests/Conformance.lean::readme"
+
+[[example]]
+upstream = "README.md#line-8"
+lean = "examples/Readme.lean"
+status = "ported"
+reason = ""
+output = "tests/Conformance.lean::readme"
+
+[[example]]
+upstream = "README.md#line-9"
+lean = "examples/Readme.lean"
+status = "ported"
+reason = ""
+output = "tests/Conformance.lean::readme"
+
+[[example]]
+upstream = "README.md#line-10"
+lean = "examples/Readme.lean"
+status = "ported"
+reason = ""
+output = "tests/Conformance.lean::readme"
+
+[[example]]
+upstream = "docs/index.rst#line-1"
+lean = "examples/Index.lean"
+status = "ported"
+reason = ""
+output = "tests/Conformance.lean::docs_index"
+
+[[example]]
+upstream = "docs/index.rst#line-2"
+lean = "examples/Index.lean"
+status = "ported"
+reason = ""
+output = "tests/Conformance.lean::docs_index"
+
+[[example]]
+upstream = "docs/index.rst#line-3"
+lean = "examples/Index.lean"
+status = "ported"
+reason = ""
+output = "tests/Conformance.lean::docs_index"
+
+[[example]]
+upstream = "docs/index.rst#line-4"
+lean = "examples/Index.lean"
+status = "ported"
+reason = ""
+output = "tests/Conformance.lean::docs_index"
+
+[[example]]
+upstream = "docs/index.rst#line-5"
+lean = "examples/Index.lean"
+status = "ported"
+reason = ""
+output = "tests/Conformance.lean::docs_index"
+
+[[example]]
+upstream = "docs/escaping.rst#Markup docstring: Markup(...), Markup(42), Markup.escape"
+lean = "examples/Escaping.lean"
+status = "ported"
+reason = ""
+output = "tests/Conformance.lean::docs_escaping_markup"
+
+[[example]]
+upstream = "docs/escaping.rst#Markup docstring: class Foo with __html__"
+lean = "examples/Escaping.lean"
+status = "ported"
+reason = ""
+output = "tests/Conformance.lean::docs_escaping_markup"
+
+[[example]]
+upstream = "docs/escaping.rst#Markup docstring: % and +"
+lean = "examples/Escaping.lean"
+status = "ported"
+reason = ""
+output = "tests/Conformance.lean::docs_escaping_markup"
+
+[[example]]
+upstream = "docs/escaping.rst#Markup.unescape docstring"
+lean = "examples/Escaping.lean"
+status = "ported"
+reason = ""
+output = "tests/Conformance.lean::docs_escaping_unescape"
+
+[[example]]
+upstream = "docs/escaping.rst#Markup.striptags docstring"
+lean = "examples/Escaping.lean"
+status = "ported"
+reason = ""
+output = "tests/Conformance.lean::docs_escaping_unescape"
+
+[[example]]
+upstream = "docs/escaping.rst#escape_silent docstring"
+lean = "examples/Escaping.lean"
+status = "ported"
+reason = ""
+output = "tests/Conformance.lean::docs_escaping_silent"
+
+[[example]]
+upstream = "docs/escaping.rst#soft_str docstring"
+lean = "examples/Escaping.lean"
+status = "ported"
+reason = ""
+output = "tests/Conformance.lean::docs_escaping_soft_str"
+
+[[example]]
+upstream = "docs/html.rst#block-1 (class Image)"
+lean = "examples/Html.lean"
+status = "ported"
+reason = ""
+output = ""
+
+[[example]]
+upstream = "docs/html.rst#block-2 (Markup(img))"
+lean = "examples/Html.lean"
+status = "ported"
+reason = ""
+output = "tests/Conformance.lean::docs_html"
+
+[[example]]
+upstream = "docs/html.rst#block-3 (class User)"
+lean = "examples/Html.lean"
+status = "ported"
+reason = ""
+output = ""
+
+[[example]]
+upstream = "docs/html.rst#block-4 (escape(user))"
+lean = "examples/Html.lean"
+status = "ported"
+reason = ""
+output = "tests/Conformance.lean::docs_html"
+
+[[example]]
+upstream = "docs/formatting.rst#block-1 (class User)"
+lean = "examples/Formatting.lean"
+status = "ported"
+reason = ""
+output = ""
+
+[[example]]
+upstream = "docs/formatting.rst#block-2 (escape(user), format(user=user))"
+lean = "examples/Formatting.lean"
+status = "ported"
+reason = ""
+output = "tests/Conformance.lean::docs_formatting"
+
+[[example]]
+upstream = "docs/formatting.rst#block-3 (printf-style)"
+lean = "examples/Formatting.lean"
+status = "ported"
+reason = ""
+output = "tests/Conformance.lean::docs_formatting"
+
+[[example]]
+upstream = "docs/index.rst#block-installing"
+lean = ""
+status = "excluded"
+reason = "a shell command (pip install), not Python; Lean users add the package to lakefile.toml"
+output = ""
+
+[[example]]
+upstream = "docs/changes.rst"
+lean = ""
+status = "excluded"
+reason = "the changelog: no code blocks"
+output = ""
+
+[[example]]
+upstream = "docs/license.rst"
+lean = ""
+status = "excluded"
+reason = "the license text: no code blocks"
+output = ""

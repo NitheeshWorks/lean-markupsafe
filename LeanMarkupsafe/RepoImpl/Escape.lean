@@ -59,6 +59,10 @@ instance {α : Type u} [ToMarkup α] : ToMarkup (Option α) where
     | none => escape "None"
     | some x => ToMarkup.toMarkup x
 
+/-- Python's bare `None`: `Markup.escape none` and `escapeSilent none` need no
+type annotation, as in upstream (`escape(None)`). -/
+@[default_instance low] instance noneToMarkup : ToMarkup (Option Empty) := ⟨fun _ => escape "None"⟩
+
 instance : ToMarkup SoftString where
   toMarkup
     | .plain s => escape s
@@ -69,6 +73,20 @@ namespace Markup
 /-- Upstream `Markup.escape(obj)` / `escape(obj)` for any object: escapes
 strings, keeps `Markup` and other `HasHtml` values as they render. -/
 def escape {α : Type u} [ToMarkup α] (x : α) : Markup := ToMarkup.toMarkup x
+
+/-- Upstream `Markup(obj)`: how a value is marked safe without escaping. -/
+class ToMarkupSafe (α : Type u) where
+  /-- Mark the value safe (upstream `Markup(obj)`). -/
+  markSafe : α → Markup
+
+instance : ToMarkupSafe String := ⟨Markup.mk⟩
+instance {α : Type u} [HasHtml α] : ToMarkupSafe α := ⟨HasHtml.html⟩
+instance (priority := low) {α : Type u} [ToString α] : ToMarkupSafe α := ⟨fun x => ⟨toString x⟩⟩
+
+/-- Upstream `Markup(obj)`: a string marked safe as it is, an object with
+`__html__` as its rendering, anything else as its `toString`, all unescaped:
+`Markup.of "<em>hi</em>"`, `Markup.of 42`, `Markup.of img`. -/
+def of {α : Type u} [ToMarkupSafe α] (x : α) : Markup := ToMarkupSafe.markSafe x
 
 /-- Upstream `Markup(obj)` for an object with `__html__`: its rendering,
 marked safe. -/

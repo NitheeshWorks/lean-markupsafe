@@ -236,7 +236,7 @@ for trusted HTML templates see `formatInterpolates`. -/
 def formatClosed : Prop :=
   ∀ (t : Markup) (pos : List FormatArg) (named : List (String × FormatArg)) (r : Markup),
     IsEscaped t.str → (∀ a ∈ pos, a.Safe) → (∀ p ∈ named, p.2.Safe) →
-    t.format pos named = .ok r → IsEscaped r.str
+    t.formatWith pos named = .ok r → IsEscaped r.str
 
 /-- `%` of an escaped-text template with safe arguments is escaped. This
 covers templates that are themselves escaped text only; for trusted HTML
@@ -276,7 +276,7 @@ successful `format` is the template with each field replaced by the
 rendering of the argument it refers to. -/
 def formatInterpolates : Prop :=
   ∀ (t : Markup) (pos : List FormatArg) (named : List (String × FormatArg)) (r : Markup),
-    t.format pos named = .ok r → Interpolates BraceSeg pos named t r
+    t.formatWith pos named = .ok r → Interpolates BraceSeg pos named t r
 
 /-- `mod_tuple_interpolates`: the same for `%` with a tuple; every argument
 is used. -/
@@ -301,7 +301,7 @@ replaces each field by `escape` of the string it refers to, and changes
 nothing else. -/
 def formatStrings : Prop :=
   ∀ (t : Markup) (ss : List String) (kv : List (String × String)) (r : Markup),
-    t.format (ss.map .ofString) (kv.map fun p => (p.1, .ofString p.2)) = .ok r →
+    t.formatWith (ss.map .ofString) (kv.map fun p => (p.1, .ofString p.2)) = .ok r →
     ∃ segs args, (∀ s ∈ segs, BraceSeg s) ∧ printSegs segs = t.str.toList ∧
       args.length = fieldCount segs ∧
       Forall₂ (fun rc s => rc.1.lookupStr ss kv = some s) (fieldRefs segs) args ∧

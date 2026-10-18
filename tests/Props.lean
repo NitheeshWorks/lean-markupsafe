@@ -92,7 +92,7 @@ def properties : List Property :=
     prop "striptags of escaped text is the normalised text" fun s =>
       (escape s).striptags == String.ofList (collapseSpaces s.toList),
     prop "format \"{}\" of a string is its escape" fun s =>
-      match (Markup.mk "{}").format [.ofString s] with
+      match (Markup.mk "{}").format [FormatArg.ofString s] with
       | .ok m => m == escape s
       | .error _ => false,
     prop "% of an escaped template with a string argument is escaped" fun s =>

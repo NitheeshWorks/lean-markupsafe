@@ -1,6 +1,6 @@
 name = "LeanMarkupsafe"
 version = "0.1.0"
-defaultTargets = ["LeanMarkupsafe", "props", "conformance"]
+defaultTargets = ["LeanMarkupsafe", "Examples", "props", "conformance"]
 
 # The verified library. Everything under LeanMarkupsafe/ except Transport.lean is a
 # total function and the proof surface; see CONTRIBUTING.md.
@@ -18,6 +18,14 @@ root = "tests.Props"
 [[lean_exe]]
 name = "conformance"
 root = "tests.Conformance"
+
+# Ports of MarkupSafe's own examples: the code blocks of its README and docs
+# pages (see examples/MANIFEST.toml). tests/Conformance.lean checks every value
+# they print against MarkupSafe 3.0.4.
+[[lean_lib]]
+name = "Examples"
+roots = ["examples.Readme", "examples.Index", "examples.Escaping", "examples.Html",
+  "examples.Formatting"]
 
 # The shared theory library: lawful codecs (Keel.Codec) restate the escape
 # round trips as instances of one codec law.

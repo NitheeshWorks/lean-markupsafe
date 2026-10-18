@@ -1,4 +1,9 @@
 import LeanMarkupsafe
+import examples.Readme
+import examples.Index
+import examples.Escaping
+import examples.Html
+import examples.Formatting
 
 /-!
 # Conformance cases
@@ -50,7 +55,7 @@ structure User where
   username : String
 
 def User.toHtml (u : User) : Markup :=
-  match (Markup.mk "<span class=user>{0}</span>").format [.ofString u.username] with
+  match (Markup.mk "<span class=user>{0}</span>").format [FormatArg.ofString u.username] with
   | .ok m => m
   | .error _ => Markup.empty
 
@@ -58,7 +63,7 @@ instance : HasHtmlFormat User where
   html := User.toHtml
   htmlFormat u spec :=
     if spec == "link" then
-      (Markup.mk "<a href=\"/user/{0}\">{1}</a>").format [.ofNat u.id, .ofMarkup u.toHtml]
+      (Markup.mk "<a href=\"/user/{0}\">{1}</a>").format [FormatArg.ofNat u.id, .ofMarkup u.toHtml]
     else if spec.isEmpty then .ok u.toHtml
     else .error (.unsupportedSpec "Invalid format spec")
 
@@ -142,9 +147,9 @@ def cases : List Case :=
       ((escape "<script>alert(document.cookie);</script>").str ==
          "&lt;script&gt;alert(document.cookie);&lt;/script&gt;" &&
        Markup.escape (Markup.mk "<strong>Hello</strong>") == Markup.mk "<strong>Hello</strong>" &&
-       okStr ((Markup.mk "Hello <em>{name}</em>").format [] [("name", "\"World\"")])
+       okStr ((Markup.mk "Hello <em>{name}</em>").format [("name", "\"World\"")])
          "Hello <em>&#34;World&#34;</em>" &&
-       okStr ((Markup.mk "<em>{}</em> {}").format ["<x>", (3 : Nat)]) "<em>&lt;x&gt;</em> 3"),
+       okStr ((Markup.mk "<em>{}</em> {}").format ("<x>", 3)) "<em>&lt;x&gt;</em> 3"),
     check "tests/test_markupsafe.py::test_type_behavior" "type_behavior"
       ((Markup.mk "foo" ++ "bar").str == "foobar" && HasHtml.html (Markup.mk "foo") == Markup.mk "foo"),
     check "tests/test_markupsafe.py::test_html_interop" "html_interop"
@@ -180,15 +185,15 @@ def cases : List Case :=
         let twice := (Markup.mk once).unescape
         once == "&foo;" && twice == "&foo;")),
     check "tests/test_markupsafe.py::test_format" "format[named]"
-      (okStr ((Markup.mk "<em>{awesome}</em>").format [] [("awesome", .ofString "<awesome>")])
+      (okStr ((Markup.mk "<em>{awesome}</em>").format [("awesome", FormatArg.ofString "<awesome>")])
         "<em>&lt;awesome&gt;</em>"),
     check "tests/test_markupsafe.py::test_format" "format[index access rejected: deviation]"
-      (isErr ((Markup.mk "{0[1][bar]}").format [.ofString "x"])),
+      (isErr ((Markup.mk "{0[1][bar]}").format [FormatArg.ofString "x"])),
     check "tests/test_markupsafe.py::test_format_map" "format_map"
       (okStr ((Markup.mk "<em>{value}</em>").formatMap [("value", .ofString "<value>")])
         "<em>&lt;value&gt;</em>"),
     check "tests/test_markupsafe.py::test_formatting_empty" "formatting_empty"
-      (okStr ((Markup.mk "{}").format [.ofNat 0]) "0"),
+      (okStr ((Markup.mk "{}").format [FormatArg.ofNat 0]) "0"),
     check "tests/test_markupsafe.py::test_custom_formatting" "custom_formatting"
       (okStr ((Markup.mk "{0}").format [ToFormatArg.toFormatArg (HtmlOnly.mk "<foo>")]) "<foo>" &&
        okStr ((Markup.mk "{0}").format [ToFormatArg.toFormatArg (HtmlAndFormat.mk ())]) "<FORMAT>"),
@@ -196,7 +201,7 @@ def cases : List Case :=
       (okStr ((Markup.mk "<p>User: {0:link}").format [ToFormatArg.toFormatArg (User.mk 1 "foo")])
         "<p>User: <a href=\"/user/1\"><span class=user>foo</span></a>"),
     check "tests/test_markupsafe.py::test_formatting_with_objects" "formatting_with_objects"
-      (okStr ((Markup.mk "{s}").format [] [("s", .ofString "строка")]) "строка"),
+      (okStr ((Markup.mk "{s}").format [("s", FormatArg.ofString "строка")]) "строка"),
     check "tests/test_markupsafe.py::test_escape_silent" "escape_silent"
       (escapeSilent (none : Option String) == Markup.empty &&
        escapeSilent (some "<foo>") == Markup.mk "&lt;foo&gt;"),
@@ -233,11 +238,60 @@ def cases : List Case :=
     check "html.unescape (named prefix fallback)" "named_prefix_fallback"
       (unescape "&notit; &amp &ampx; &zz;" == "¬it; & &x; &zz;") ]
 
+/-! ## The ported docs examples (`examples/`)
+
+Each value an example prints, against what MarkupSafe 3.0.4 prints for the
+same Python (run with `upstream-spec/.venv/bin/python -I`). Where the docs
+page shows a different output than the released package produces, the
+package's output is the expected value. -/
+
+def isMarkup (m : Markup) (expect : String) : Bool := m.str == expect
+
+def exampleCases : List Case :=
+  [ check "README.md#examples" "readme" (
+      isMarkup Examples.Readme.escaped "&lt;script&gt;alert(document.cookie);&lt;/script&gt;" &&
+      isMarkup Examples.Readme.marked "<strong>Hello</strong>" &&
+      isMarkup Examples.Readme.notEscapedAgain "<strong>Hello</strong>" &&
+      okStr Examples.Readme.formatted "Hello <em>&#34;World&#34;</em>"),
+    check "docs/index.rst" "docs_index" (
+      isMarkup Examples.Index.hello "&lt;em&gt;Hello&lt;/em&gt;" &&
+      isMarkup Examples.Index.escapedAgain "&lt;em&gt;Hello&lt;/em&gt;" &&
+      isMarkup Examples.Index.greeting "&lt;em&gt;Hello&lt;/em&gt; &lt;strong&gt;World&lt;/strong&gt;"),
+    check "docs/escaping.rst (Markup docstring)" "docs_escaping_markup" (
+      isMarkup Examples.Escaping.hello "Hello, <em>World</em>!" &&
+      isMarkup Examples.Escaping.fortyTwo "42" &&
+      isMarkup Examples.Escaping.helloEscaped "Hello, &lt;em&gt;World&lt;/em&gt;!" &&
+      isMarkup Examples.Escaping.foo "<a href=\"/foo\">foo</a>" &&
+      okStr Examples.Escaping.interpolated "<em>foo &amp; bar</em>" &&
+      isMarkup Examples.Escaping.added "<em>Hello</em> &lt;foo&gt;"),
+    check "docs/escaping.rst (unescape, striptags docstrings)" "docs_escaping_unescape" (
+      Examples.Escaping.unescaped == "Main » <em>About</em>" &&
+      Examples.Escaping.stripped == "Main » About"),
+    check "docs/escaping.rst (escape_silent docstring)" "docs_escaping_silent" (
+      isMarkup Examples.Escaping.escapeNone "None" && isMarkup Examples.Escaping.silentNone ""),
+    check "docs/escaping.rst (soft_str docstring)" "docs_escaping_soft_str" (
+      isMarkup Examples.Escaping.value "&lt;User 1&gt;" &&
+      isMarkup Examples.Escaping.valueAsString "&amp;lt;User 1&amp;gt;" &&
+      isMarkup Examples.Escaping.valueSoft "&lt;User 1&gt;"),
+    check "docs/html.rst" "docs_html" (
+      isMarkup Examples.Html.imgMarkup "<img src=\"/static/logo.png\">" &&
+      isMarkup Examples.Html.userMarkup "<a href=\"/user/3\">&lt;script&gt;</a>"),
+    check "docs/formatting.rst" "docs_formatting" (
+      isMarkup Examples.Formatting.escaped "<span class=\"user\">&lt;script&gt;</span>" &&
+      okStr Examples.Formatting.linked
+        "<p>User: <a href=\"/user/3\"><span class=\"user\">&lt;script&gt;</span></a>" &&
+      okStr Examples.Formatting.printf "<a href=\"/user/3\">&lt;script&gt;</a>"),
+    -- Deviation: a Lean list on the right of `%` is the argument tuple;
+    -- upstream formats a Python list's repr as one value:
+    -- `Markup('%s') % ['<a>']` is `Markup('[&#39;&lt;a&gt;&#39;]')` in 3.0.4.
+    check "src/markupsafe/__init__.py::Markup.__mod__ (deviation)" "percent_list_is_tuple"
+      (okStr (Markup.mk "%s" % ["<a>"]) "&lt;a&gt;") ]
+
 def main : IO UInt32 := do
   let mut failures := 0
-  for c in cases do
+  for c in cases ++ exampleCases do
     let ok ← try c.run catch e => do IO.println s!"      {e}"; pure false
     IO.println s!"{if ok then "ok  " else "FAIL"}  {c.name}  [{c.upstream}]"
     unless ok do failures := failures + 1
-  IO.println s!"{cases.length} cases, {failures} failing"
+  IO.println s!"{cases.length + exampleCases.length} cases, {failures} failing"
   return if failures == 0 then 0 else 1

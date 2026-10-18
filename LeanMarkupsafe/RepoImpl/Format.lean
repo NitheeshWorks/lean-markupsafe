@@ -108,7 +108,7 @@ def ofHtmlFormat {α : Type u} [HasHtmlFormat α] (x : α) : FormatArg where
 end FormatArg
 
 /-- A string literal can stand for a string argument:
-`t.format [] [("name", "World")]`. -/
+`t.format [("name", "World")]`. -/
 instance : Coe String FormatArg := ⟨FormatArg.ofString⟩
 instance : Coe Markup FormatArg := ⟨FormatArg.ofMarkup⟩
 instance : Coe Int FormatArg := ⟨FormatArg.ofInt⟩
@@ -277,9 +277,10 @@ def formatList (pos : List FormatArg) (named : List (String × FormatArg)) :
     else mapOk (c :: ·) (formatList pos named st l)
 termination_by _ l => l.length
 
-/-- `str.format` on markup, escaping every argument that is not already safe
-(upstream `Markup.format`; `format_map` is the `named`-only case). -/
-def Markup.format (t : Markup) (pos : List FormatArg)
+/-- `str.format` on markup with positional and keyword arguments, escaping
+every argument that is not already safe. `Markup.format` is the same with
+the arguments written as upstream writes them. -/
+def Markup.formatWith (t : Markup) (pos : List FormatArg)
     (named : List (String × FormatArg) := []) : Except FormatError Markup :=
   match formatList pos named .unset t.str.toList with
   | .ok o => .ok ⟨String.ofList o⟩
@@ -288,7 +289,7 @@ def Markup.format (t : Markup) (pos : List FormatArg)
 /-- Upstream `Markup.format_map`. -/
 def Markup.formatMap (t : Markup) (named : List (String × FormatArg)) :
     Except FormatError Markup :=
-  t.format [] named
+  t.formatWith [] named
 
 /-! ## `%` -/
 
@@ -386,9 +387,10 @@ def Markup.mod (t : Markup) (args : PercentArgs) : Except FormatError Markup :=
   | .ok o => .ok ⟨String.ofList o⟩
   | .error e => .error e
 
-/-- What can stand on the right of `%`, as in upstream: a single value (a
-one-element tuple), a list or a tuple of values, or a list of `(key, value)`
-pairs (a mapping). -/
+/-- The arguments of `%` and `format`, written as upstream writes them: a
+single value (a one-element tuple), a list or a tuple of values (positional
+arguments), or a list of `(key, value)` pairs (a mapping, or keyword
+arguments). -/
 class ToPercentArgs (α : Type u) where
   toPercentArgs : α → PercentArgs
 
@@ -421,5 +423,22 @@ instance {α : Type u} {β : Type v} [ToFormatArg α] [ToArgTuple β] : ToPercen
 `t % ["<a>", "<b>"]`, `t % ("<a>", 3)`, `t % [("key", "<a>")]`. -/
 instance {α : Type u} [ToPercentArgs α] : HMod Markup α (Except FormatError Markup) :=
   ⟨fun t x => t.mod (ToPercentArgs.toPercentArgs x)⟩
+
+/-- Upstream `Markup.format(*args, **kwargs)`: `t.format "x"`,
+`t.format (3, "x")`, `t.format [("name", "x")]`. With both positional and
+keyword arguments, use `formatWith`. -/
+def Markup.format {α : Type u} [ToPercentArgs α] (t : Markup) (args : α) :
+    Except FormatError Markup :=
+  match ToPercentArgs.toPercentArgs args with
+  | .tuple xs => t.formatWith xs []
+  | .mapping kv => t.formatWith [] kv
+
+/-- `format` where a failure is a programming error, as upstream raises:
+panics on a malformed template or a missing argument. For use where the
+result must be `Markup`, such as a `HasHtml` instance. -/
+def Markup.format! {α : Type u} [ToPercentArgs α] (t : Markup) (args : α) : Markup :=
+  match t.format args with
+  | .ok m => m
+  | .error e => panic! (toString e)
 
 end LeanMarkupsafe
