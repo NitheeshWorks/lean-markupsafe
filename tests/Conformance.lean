@@ -74,6 +74,32 @@ def escapeCases : List (String × String) :=
    ("&><'\"🍺 xyz", "&amp;&gt;&lt;&#39;&#34;🍺 xyz"),
    ("🍣🍢&><'\"", "🍣🍢&amp;&gt;&lt;&#39;&#34;")]
 
+def decodeHex (s : String) : String :=
+  String.ofList ((s.splitOn " ").filter (· ≠ "") |>.map fun h =>
+    Char.ofNat (h.toList.foldl (fun n c => 16 * n + hexDigitValue c) 0))
+
+/-- Every line of `tests/fixtures/unescape.txt` (generated from CPython's
+`html.unescape` by `scripts/gen-unescape-fixture.py`) must match. -/
+def unescapeFixture : Case where
+  upstream := "src/markupsafe/__init__.py::Markup.unescape (html.unescape differential fixture)"
+  name := "unescape_fixture"
+  run := do
+    let text ← IO.FS.readFile "tests/fixtures/unescape.txt"
+    let mut bad := 0
+    let mut total := 0
+    for line in text.splitOn "\n" do
+      if line.isEmpty then continue
+      match line.splitOn "\t" with
+      | [i, o] =>
+        total := total + 1
+        let inp := decodeHex i
+        if unescape inp != decodeHex o then
+          if bad < 5 then IO.println s!"      mismatch: {repr inp} -> {repr (unescape inp)}"
+          bad := bad + 1
+      | _ => bad := bad + 1
+    IO.println s!"      {total} fixture lines, {bad} mismatches"
+    return bad == 0 && total > 10000
+
 def cases : List Case :=
   (escapeCases.zipIdx.map fun ((v, e), i) =>
     check "tests/test_escape.py::test_escape" s!"escape[{i}]" ((escape v).str == e)) ++
@@ -88,6 +114,19 @@ def cases : List Case :=
         "<em>&lt;bad user&gt;</em>"),
     check "tests/test_markupsafe.py::test_string_interpolation" "interpolation[%i] (integer argument)"
       (okStr ((Markup.mk "%i") % FormatArg.ofInt 3) "3"),
+    check "src/markupsafe/__init__.py::_MarkupEscapeHelper.__int__" "percent_d_of_text"
+      (okStr ((Markup.mk "%d") % FormatArg.ofString "5") "5" &&
+       okStr ((Markup.mk "%d") % FormatArg.ofString " -12 ") "-12" &&
+       okStr ((Markup.mk "%i") % FormatArg.ofString "1_000") "1000" &&
+       isErr ((Markup.mk "%d") % FormatArg.ofString "x") &&
+       okStr ((Markup.mk "%d") % FormatArg.ofMarkup (Markup.mk "7")) "7"),
+    check "tests/test_markupsafe.py::test_escape_silent" "escape_none"
+      (Markup.escape (none : Option String) == Markup.mk "None" &&
+       Markup.escape (some "<") == Markup.mk "&lt;"),
+    check "tests/test_markupsafe.py::test_string_interpolation" "trusted_template_provenance"
+      (match API.formatStrings (Markup.mk "<em>{}</em>") ["<bad user>"] with
+       | .ok r => r.val.str == "<em>&lt;bad user&gt;</em>"
+       | .error _ => false),
     check "tests/test_markupsafe.py::test_type_behavior" "type_behavior"
       ((Markup.mk "foo" ++ "bar").str == "foobar" && HasHtml.html (Markup.mk "foo") == Markup.mk "foo"),
     check "tests/test_markupsafe.py::test_html_interop" "html_interop"
@@ -172,6 +211,7 @@ def cases : List Case :=
     check "html.unescape (numeric references)" "numeric_references"
       (unescape "&#0;&#13;&#128;&#x110000;&#xD800;&#1;&#65;&#x41;&#X41;&#65" ==
         "�\r€��AAAA"),
+    unescapeFixture,
     check "html.unescape (named prefix fallback)" "named_prefix_fallback"
       (unescape "&notit; &amp &ampx; &zz;" == "¬it; & &x; &zz;") ]
 

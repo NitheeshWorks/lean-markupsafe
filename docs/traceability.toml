@@ -85,7 +85,7 @@ title = "unescape follows html.unescape: HTML5 named table, longest-prefix fallb
 status = "tested"
 realises = ["LeanMarkupsafe.decodeRef", "LeanMarkupsafe.numericRef", "LeanMarkupsafe.namedRef", "LeanMarkupsafe.entityMap", "LeanMarkupsafe.lookupNamed"]
 theorem = ["LeanMarkupsafe.decodeRef_length"]
-test = ["tests/Conformance.lean::numeric_references", "tests/Conformance.lean::named_prefix_fallback", "tests/Conformance.lean::entity_table_size", "tests/Conformance.lean::entity_fast_path_agrees", "tests/Props.lean::decimal and hex numeric references agree"]
+test = ["tests/Conformance.lean::unescape_fixture", "tests/fixtures/unescape.txt", "tests/Conformance.lean::numeric_references", "tests/Conformance.lean::named_prefix_fallback", "tests/Conformance.lean::entity_table_size", "tests/Conformance.lean::entity_fast_path_agrees", "tests/Props.lean::decimal and hex numeric references agree"]
 note = "Behaviour on arbitrary references is a table lookup against 2231 entries; agreement with the table is tested, not proved. Termination and the round trips are proved."
 
 [[requirement]]
@@ -136,7 +136,7 @@ note = "Lean values have no dynamic indexing; such fields return FormatError.uns
 [[requirement]]
 id = "format.deviation.specs"
 upstream = "tests/test_markupsafe.py::test_string_interpolation"
-title = "Python format specs for strings/numbers ({:>5}, %.2f, %5s, floats)"
+title = "Python format specs for strings/numbers ({:>5}, %.2f, %5s, floats), %r/%a/%c"
 status = "deviation"
 realises = ["LeanMarkupsafe.percentConv", "LeanMarkupsafe.FormatArg.ofString", "LeanMarkupsafe.FormatArg.ofInt"]
 test = ["tests/Conformance.lean::interpolation[%i] (integer argument)"]
@@ -215,3 +215,55 @@ upstream = "tests/test_leak.py::test_markup_leaks"
 title = "C speedups, reference leaks, extension init (test_leak, test_ext_init)"
 status = "excluded"
 note = "Implementation details of the CPython extension."
+
+[[requirement]]
+id = "format.provenance"
+upstream = "tests/test_markupsafe.py::test_string_interpolation"
+title = "format/% on any (trusted HTML) template keep its literal text and insert only argument renderings; string arguments appear as escape s"
+status = "implemented"
+realises = ["LeanMarkupsafe.Seg", "LeanMarkupsafe.Provenance", "LeanMarkupsafe.API.formatTrusted", "LeanMarkupsafe.API.formatStrings", "LeanMarkupsafe.API.modTrusted", "LeanMarkupsafe.API.modStrings"]
+theorem = ["LeanMarkupsafe.format_provenance", "LeanMarkupsafe.mod_provenance", "LeanMarkupsafe.string_arg_rendering", "LeanMarkupsafe.format_string_args_escaped", "LeanMarkupsafe.mod_string_args_escaped"]
+test = ["tests/Conformance.lean::trusted_template_provenance"]
+
+[[requirement]]
+id = "mod.percent-d-text"
+upstream = "src/markupsafe/__init__.py::_MarkupEscapeHelper.__int__"
+title = "%d/%i of a string or Markup converts through int()"
+status = "implemented"
+realises = ["LeanMarkupsafe.parsePyInt", "LeanMarkupsafe.percentIntOfText"]
+theorem = ["LeanMarkupsafe.percentIntOfText_ok", "LeanMarkupsafe.string_arg_rendering"]
+test = ["tests/Conformance.lean::percent_d_of_text"]
+note = "ASCII digits only; Python also accepts other Unicode decimal digits."
+
+[[requirement]]
+id = "escape.none"
+upstream = "tests/test_markupsafe.py::test_escape_silent"
+title = "escape(None) is 'None'; escape_silent(None) is empty"
+status = "implemented"
+realises = ["LeanMarkupsafe.escapeSilent", "LeanMarkupsafe.Markup.escape"]
+test = ["tests/Conformance.lean::escape_none", "tests/Conformance.lean::escape_silent"]
+
+[[requirement]]
+id = "concat.widening"
+upstream = "src/markupsafe/__init__.py::Markup.__add__"
+title = "Markup.concat accepts any ToMarkup value (numbers via toString); upstream Markup + 1 raises TypeError"
+status = "deviation"
+realises = ["LeanMarkupsafe.Markup.concat"]
+theorem = ["LeanMarkupsafe.Markup.concat_closed"]
+note = "Widening only: the right-hand side is still escaped. String ++ Markup and Markup ++ String match upstream exactly."
+
+[[requirement]]
+id = "unescape.huge-numeric"
+upstream = "src/markupsafe/__init__.py::Markup.unescape"
+title = "decimal references over 4300 digits"
+status = "deviation"
+realises = ["LeanMarkupsafe.numericRef"]
+note = "Decoded as U+FFFD like any value above 0x10FFFF; CPython raises ValueError from sys.int_info.default_max_str_digits."
+
+[[requirement]]
+id = "format.error-text"
+upstream = "src/markupsafe/__init__.py::Markup.format"
+title = "error message for mixing automatic and manual field numbering"
+status = "deviation"
+realises = ["LeanMarkupsafe.FormatError.mixedNumbering"]
+note = "One message for both directions; upstream has two wordings. The error case is the same."

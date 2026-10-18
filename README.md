@@ -3,7 +3,19 @@
 [![Lean 4](https://img.shields.io/badge/built%20with-Lean%204-blue.svg)](https://lean-lang.org)
 [![Proofs](https://img.shields.io/badge/proofs-machine%20checked-brightgreen.svg)](CONTRIBUTING.md#verification)
 
-A clean-room port of [MarkupSafe](https://github.com/pallets/markupsafe) to Lean 4: an escaped-string type whose invariant is carried in the type, with proved escape/unescape.
+A clean-room port of [MarkupSafe](https://github.com/pallets/markupsafe) to Lean 4, with proved escape/unescape.
+
+`Markup` has upstream's semantics: it is trusted, unchecked HTML. `Markup.mk s`
+(upstream `Markup(s)`) marks any string safe, and a `HasHtml` instance's
+rendering is used verbatim, so a `Markup` value is not a proof of escaping. The
+proved invariant lives elsewhere. `LeanMarkupsafe.Escaped := {m : Markup //
+IsEscaped m.str}` is markup proved to be escaped text, and the `LeanMarkupsafe.API.*`
+functions return it, or another refinement, with the guarantee in the type. For
+templates that are trusted HTML, such as `<em>{}</em>`, the guarantee is
+provenance (`format_provenance`, `mod_provenance`, `API.formatTrusted`,
+`API.formatStrings`): the output is the template's own literal text with every
+field replaced by an argument's rendering, and a string argument always
+appears as `escape s` under `{}` and `%s` (as an escaped integer under `%d`).
 
 Part of the verified FastAPI stack: [lean-fastapi](https://github.com/NitheeshWorks/lean-fastapi)
 and its dependencies, each ported as its own repo with its proofs. This one
@@ -46,7 +58,11 @@ open LeanMarkupsafe
 A type opts into safe rendering with `instance : HasHtml T := ⟨fun t => ...⟩`
 (upstream `__html__`); `Markup.escape`, concatenation, `join` and `format`
 then use that rendering instead of escaping. `LeanMarkupsafe.API` has the
-same operations with their guarantees in the types (`Escaped`, `SafeArg`).
+same operations with their guarantees in the types (`Escaped`, `SafeArg`,
+and the provenance refinements of `formatTrusted`/`formatStrings`/
+`modTrusted`/`modStrings`). lean-jinja2 should keep untrusted text as
+`String`, build output with `escape`, `++` and `API.formatStrings`, and treat
+any `Markup` it receives as trusted.
 
 ## Status
 

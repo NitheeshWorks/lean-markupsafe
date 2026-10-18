@@ -1,5 +1,6 @@
 import LeanMarkupsafe.RepoImpl.Escape
 import LeanMarkupsafe.RepoImpl.Unescape
+import LeanMarkupsafe.RepoImpl.StripTags
 
 /-!
 # Interpolation: `Markup.format` and `Markup.mod`
@@ -21,13 +22,44 @@ are rejected with `FormatError.unsupported` (deviations recorded in
 
 namespace LeanMarkupsafe
 
+/-- Digits with single `_` separators between them (Python's integer
+literal grammar for base 10): the digit list, if well formed. -/
+def pyDigits : List Char → Option (List Char)
+  | [] => none
+  | [c] => if isDecDigit c then some [c] else none
+  | c :: d :: l =>
+    if isDecDigit c then
+      if d = '_' then
+        match l with
+        | e :: _ => if isDecDigit e then (pyDigits l).map (c :: ·) else none
+        | [] => none
+      else (pyDigits (d :: l)).map (c :: ·)
+    else none
+
+/-- Python `int(s)` for a string: surrounding whitespace stripped, an
+optional sign, ASCII decimal digits with single underscores between them.
+(Python also accepts non-ASCII decimal digits; this port does not.) -/
+def parsePyInt (s : String) : Option Int :=
+  let l := (s.toList.dropWhile isPySpace).reverse.dropWhile isPySpace |>.reverse
+  match l with
+  | '-' :: r => (pyDigits r).map fun d => -(decValue d : Int)
+  | '+' :: r => (pyDigits r).map fun d => (decValue d : Int)
+  | r => (pyDigits r).map fun d => (decValue d : Int)
+
+/-- `%d` of a text value: upstream converts the argument with `int()`. -/
+def percentIntOfText (s : String) : Except FormatError Markup :=
+  match parsePyInt s with
+  | some i => .ok (escape (toString i))
+  | none => .error (.typeError s!"invalid literal for int() with base 10: '{s}'")
+
 namespace FormatArg
 
-/-- A string argument: escaped under `%s` and `{}`; `%d` is a type error. -/
+/-- A string argument: escaped under `%s` and `{}`; under `%d` it is parsed
+as Python `int()` does and the integer is rendered. -/
 def ofString (s : String) : FormatArg where
   render
     | .percentStr => .ok (escape s)
-    | .percentInt => .error (.typeError "%d format: a real number is required, not str")
+    | .percentInt => percentIntOfText s
     | .brace spec =>
       if spec.isEmpty then .ok (escape s)
       else .error (.unsupported s!"format spec '{spec}' for a string")
@@ -55,12 +87,12 @@ def ofHtml {α : Type u} [HasHtml α] (x : α) : FormatArg where
       if spec.isEmpty then .ok (HasHtml.html x)
       else .error (.unsupportedSpec s!"Format specifier {spec} given, but the value does not define __html_format__. A class that defines __html__ must define __html_format__ to work with format specifiers.")
 
-/-- A `Markup` argument: inserted verbatim; a format spec is an error
-(upstream `Markup.__html_format__`). -/
+/-- A `Markup` argument: inserted verbatim; `%d` parses its text with
+`int()`; a format spec is an error (upstream `Markup.__html_format__`). -/
 def ofMarkup (m : Markup) : FormatArg where
   render
     | .percentStr => .ok m
-    | .percentInt => .error (.typeError "%d format: a real number is required, not Markup")
+    | .percentInt => percentIntOfText m.str
     | .brace spec =>
       if spec.isEmpty then .ok m
       else .error (.unsupportedSpec "Unsupported format specification for Markup.")

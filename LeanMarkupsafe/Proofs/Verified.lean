@@ -1,6 +1,7 @@
 import LeanMarkupsafe.Proofs.Escape
 import LeanMarkupsafe.Proofs.Closure
 import LeanMarkupsafe.Proofs.StripTags
+import LeanMarkupsafe.Proofs.Provenance
 
 /-!
 # The harness: one `Verified<Layer>` structure per layer
@@ -90,5 +91,26 @@ theorem theVerifiedStripTags : VerifiedStripTags where
   noTags := striptags_no_tags
   noLt := removeTags_no_lt
   passes := striptags_eq
+
+/-- Provenance of `format`/`%` output for any template, trusted HTML
+included (`Proofs/Provenance.lean`). -/
+structure VerifiedProvenance where
+  /-- `format_provenance`. -/
+  format : Spec.formatProvenance
+  /-- `mod_provenance`. -/
+  mod : Spec.modProvenance
+  /-- `string_arg_rendering`. -/
+  stringArg : Spec.stringArgRendering
+  /-- `format_string_args_escaped`. -/
+  formatStrings : Spec.formatStringArgsEscaped
+  /-- `mod_string_args_escaped`. -/
+  modStrings : Spec.modStringArgsEscaped
+
+theorem theVerifiedProvenance : VerifiedProvenance where
+  format := format_provenance
+  mod := mod_provenance
+  stringArg := string_arg_rendering
+  formatStrings := format_string_args_escaped
+  modStrings := mod_string_args_escaped
 
 end LeanMarkupsafe

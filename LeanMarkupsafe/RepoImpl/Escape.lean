@@ -52,6 +52,13 @@ instance (priority := default) instToMarkupOfHasHtml {α : Type u} [HasHtml α] 
 instance (priority := low) instToMarkupOfToString {α : Type u} [ToString α] : ToMarkup α :=
   ⟨fun x => escape (toString x)⟩
 
+/-- `Option` follows Python's `None`: `none` renders as `None` (upstream
+`escape(None)`); use `escapeSilent` for the empty string. -/
+instance {α : Type u} [ToMarkup α] : ToMarkup (Option α) where
+  toMarkup
+    | none => escape "None"
+    | some x => ToMarkup.toMarkup x
+
 instance : ToMarkup SoftString where
   toMarkup
     | .plain s => escape s

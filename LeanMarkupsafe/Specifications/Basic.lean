@@ -73,6 +73,92 @@ def escapedLength (s : String) : Nat :=
   s.length + 4 * s.toList.count '&' + 3 * s.toList.count '<' + 3 * s.toList.count '>' +
     4 * s.toList.count '"' + 4 * s.toList.count '\''
 
+/-! ## Template provenance
+
+A model of templates independent of the engines: a template is a list of
+segments, each literal text, a quoted delimiter (`{{`, `}}`, `%%`) or a
+field. `printSegs` gives the template text and `fillSegs` the output once
+each field is replaced by a rendering. The provenance specifications say
+that whatever `format`/`%` returns is the fill of the template's own
+segments, with every inserted piece an argument's rendering. This holds for
+any template, trusted HTML included. -/
+
+/-- One segment of a template. -/
+inductive Seg where
+  /-- A literal character, copied verbatim. -/
+  | text (c : Char)
+  /-- A quoted delimiter: printed as `src`, yields `c` (`{{` gives `{`). -/
+  | quote (src : List Char) (c : Char)
+  /-- A placeholder printed as `src`, replaced by one argument rendering. -/
+  | field (src : List Char)
+  deriving DecidableEq, Repr
+
+/-- The template text of a segment. -/
+def Seg.src : Seg → List Char
+  | .text c => [c]
+  | .quote s _ => s
+  | .field s => s
+
+/-- The template text of a segment list. -/
+def printSegs : List Seg → List Char
+  | [] => []
+  | s :: r => s.src ++ printSegs r
+
+/-- Number of fields. -/
+def fieldCount : List Seg → Nat
+  | [] => 0
+  | .field _ :: r => fieldCount r + 1
+  | _ :: r => fieldCount r
+
+/-- The output: literals copied, quotes unquoted, fields replaced in order
+by the given renderings. -/
+def fillSegs : List Seg → List Markup → List Char
+  | [], _ => []
+  | .text c :: r, ms => c :: fillSegs r ms
+  | .quote _ c :: r, ms => c :: fillSegs r ms
+  | .field _ :: r, m :: ms => m.str.toList ++ fillSegs r ms
+  | .field _ :: r, [] => fillSegs r []
+
+/-- A well-formed `str.format` segment: literal text has no brace, quotes
+are `{{`/`}}`, a field is `{...}` with no brace inside. -/
+def BraceSeg : Seg → Prop
+  | .text c => c ≠ '{' ∧ c ≠ '}'
+  | .quote s c => (s = ['{', '{'] ∧ c = '{') ∨ (s = ['}', '}'] ∧ c = '}')
+  | .field s => ∃ f, s = '{' :: f ++ ['}'] ∧ '{' ∉ f ∧ '}' ∉ f
+
+/-- A well-formed `%` segment: literal text has no `%`, the quote is `%%`, a
+field is `%s`/`%d`/`%i` or `%(key)s`/`%(key)d`/`%(key)i` with no `)` in the
+key. -/
+def PercentSeg : Seg → Prop
+  | .text c => c ≠ '%'
+  | .quote s c => s = ['%', '%'] ∧ c = '%'
+  | .field s => ∃ cv, (cv = 's' ∨ cv = 'd' ∨ cv = 'i') ∧
+      (s = ['%', cv] ∨ ∃ k, s = '%' :: '(' :: k ++ [')', cv] ∧ ')' ∉ k)
+
+/-- `m` is what one of `args` renders to under a conversion allowed by
+`conv`. -/
+def ArgRendering (conv : Conversion → Prop) (args : List FormatArg) (m : Markup) : Prop :=
+  ∃ a ∈ args, ∃ c, conv c ∧ a.render c = .ok m
+
+/-- `r` is template `t` with its fields filled by renderings of `args`, and
+nothing else changed. -/
+def Provenance (wf : Seg → Prop) (conv : Conversion → Prop) (args : List FormatArg)
+    (t r : Markup) : Prop :=
+  ∃ segs ms, (∀ s ∈ segs, wf s) ∧ printSegs segs = t.str.toList ∧
+    ms.length = fieldCount segs ∧ r.str.toList = fillSegs segs ms ∧
+    ∀ m ∈ ms, ArgRendering conv args m
+
+/-- Conversions a `str.format` field uses. -/
+def IsBraceConv (c : Conversion) : Prop := ∃ spec, c = .brace spec
+
+/-- Conversions a `%` field uses. -/
+def IsPercentConv (c : Conversion) : Prop := c = .percentStr ∨ c = .percentInt
+
+/-- The arguments a `%` interpolation can draw on. -/
+def PercentArgs.toList : PercentArgs → List FormatArg
+  | .tuple xs => xs
+  | .mapping kv => kv.map Prod.snd
+
 namespace Spec
 
 /-- `escape_sound`: everything `escape` returns is escaped text. -/
@@ -119,13 +205,17 @@ def joinMarkupClosed : Prop :=
   ∀ (sep : Markup) (xs : List Markup),
     IsEscaped sep.str → (∀ x ∈ xs, IsEscaped x.str) → IsEscaped (Markup.join sep xs).str
 
-/-- `format` of an escaped template with safe arguments is escaped. -/
+/-- `format` of an escaped-text template with safe arguments is escaped.
+This covers templates that are themselves escaped text only (no raw `<`);
+for trusted HTML templates see `formatProvenance`. -/
 def formatClosed : Prop :=
   ∀ (t : Markup) (pos : List FormatArg) (named : List (String × FormatArg)) (r : Markup),
     IsEscaped t.str → (∀ a ∈ pos, a.Safe) → (∀ p ∈ named, p.2.Safe) →
     t.format pos named = .ok r → IsEscaped r.str
 
-/-- `%` of an escaped template with safe arguments is escaped. -/
+/-- `%` of an escaped-text template with safe arguments is escaped. This
+covers templates that are themselves escaped text only; for trusted HTML
+templates see `modProvenance`. -/
 def modClosed : Prop :=
   ∀ (t : Markup) (xs : List FormatArg) (kv : List (String × FormatArg)) (r : Markup),
     IsEscaped t.str → (∀ a ∈ xs, a.Safe) → (∀ p ∈ kv, p.2.Safe) →
@@ -155,6 +245,44 @@ def softStrMarkup : Prop :=
 def escapeSilentSpec : Prop :=
   escapeSilent (none : Option String) = Markup.empty ∧
     ∀ s : String, escapeSilent (some s) = escape s
+
+/-- `format_provenance`: for any template, trusted HTML included, a
+successful `format` is the template's literal text with each field replaced
+by an argument's rendering. -/
+def formatProvenance : Prop :=
+  ∀ (t : Markup) (pos : List FormatArg) (named : List (String × FormatArg)) (r : Markup),
+    t.format pos named = .ok r →
+      Provenance BraceSeg IsBraceConv (pos ++ named.map Prod.snd) t r
+
+/-- `mod_provenance`: the same for `%`. -/
+def modProvenance : Prop :=
+  ∀ (t : Markup) (args : PercentArgs) (r : Markup),
+    t.mod args = .ok r → Provenance PercentSeg IsPercentConv args.toList t r
+
+/-- A string argument renders as its escape under `%s` and `{}`, and as the
+escape of an integer under `%d`. -/
+def stringArgRendering : Prop :=
+  ∀ (s : String) (c : Conversion) (m : Markup), (FormatArg.ofString s).render c = .ok m →
+    (c ≠ .percentInt → m = escape s) ∧ (c = .percentInt → ∃ i : Int, m = escape (toString i))
+
+/-- `format_string_args_escaped`: formatting any template with string
+arguments inserts exactly `escape s` for argument strings `s`, and leaves
+the template's literal text alone. -/
+def formatStringArgsEscaped : Prop :=
+  ∀ (t : Markup) (ss : List String) (kv : List (String × String)) (r : Markup),
+    t.format (ss.map FormatArg.ofString) (kv.map fun p => (p.1, FormatArg.ofString p.2)) = .ok r →
+    ∃ segs ms, (∀ s ∈ segs, BraceSeg s) ∧ printSegs segs = t.str.toList ∧
+      r.str.toList = fillSegs segs ms ∧
+      ∀ m ∈ ms, ∃ s ∈ ss ++ kv.map Prod.snd, m = escape s
+
+/-- `mod_string_args_escaped`: `%` with string arguments inserts `escape s`
+under `%s` and an escaped integer under `%d`. -/
+def modStringArgsEscaped : Prop :=
+  ∀ (t : Markup) (ss : List String) (r : Markup),
+    t.mod (.tuple (ss.map FormatArg.ofString)) = .ok r →
+    ∃ segs ms, (∀ s ∈ segs, PercentSeg s) ∧ printSegs segs = t.str.toList ∧
+      r.str.toList = fillSegs segs ms ∧
+      ∀ m ∈ ms, (∃ s ∈ ss, m = escape s) ∨ ∃ i : Int, m = escape (toString i)
 
 end Spec
 

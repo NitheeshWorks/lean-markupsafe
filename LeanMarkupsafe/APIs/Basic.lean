@@ -99,6 +99,50 @@ def modMapping (t : Escaped) (kv : List (String × SafeArg)) :
   | .ok r => .ok ⟨⟨r, mod_closed _ [] _ _ t.property (by simp) safe_of_mem_named (.inr h)⟩, by first | exact h | rfl⟩
   | .error e => .error e
 
+/-! ## Trusted templates
+
+The functions above need an `Escaped` template. Real templates are trusted
+HTML (`<em>{}</em>`); for those the guarantee is provenance: the output is
+the template's own literal text with each field replaced by an argument's
+rendering, and with string arguments each inserted piece is `escape s`. -/
+
+/-- `str.format` on a trusted template: the result carries its provenance. -/
+def formatTrusted (t : Markup) (pos : List FormatArg) (named : List (String × FormatArg) := []) :
+    Except FormatError
+      {r : Markup // Provenance BraceSeg IsBraceConv (pos ++ named.map Prod.snd) t r} :=
+  match h : t.format pos named with
+  | .ok r => .ok ⟨r, format_provenance t pos named r h⟩
+  | .error e => .error e
+
+/-- `str.format` on a trusted template with string arguments: the output is
+the template's literal text with every field replaced by `escape s` for an
+argument string `s`. -/
+def formatStrings (t : Markup) (ss : List String) (kv : List (String × String) := []) :
+    Except FormatError
+      {r : Markup // ∃ segs ms, (∀ s ∈ segs, BraceSeg s) ∧ printSegs segs = t.str.toList ∧
+        r.str.toList = fillSegs segs ms ∧ ∀ m ∈ ms, ∃ s ∈ ss ++ kv.map Prod.snd, m = escape s} :=
+  match h : t.format (ss.map FormatArg.ofString) (kv.map fun p => (p.1, FormatArg.ofString p.2)) with
+  | .ok r => .ok ⟨r, format_string_args_escaped t ss kv r h⟩
+  | .error e => .error e
+
+/-- `%` on a trusted template: the result carries its provenance. -/
+def modTrusted (t : Markup) (args : PercentArgs) :
+    Except FormatError {r : Markup // Provenance PercentSeg IsPercentConv args.toList t r} :=
+  match h : t.mod args with
+  | .ok r => .ok ⟨r, mod_provenance t args r h⟩
+  | .error e => .error e
+
+/-- `%` on a trusted template with string arguments: every inserted piece
+is `escape s` (under `%s`) or an escaped integer (under `%d`). -/
+def modStrings (t : Markup) (ss : List String) :
+    Except FormatError
+      {r : Markup // ∃ segs ms, (∀ s ∈ segs, PercentSeg s) ∧ printSegs segs = t.str.toList ∧
+        r.str.toList = fillSegs segs ms ∧
+        ∀ m ∈ ms, (∃ s ∈ ss, m = escape s) ∨ ∃ i : Int, m = escape (toString i)} :=
+  match h : t.mod (.tuple (ss.map FormatArg.ofString)) with
+  | .ok r => .ok ⟨r, mod_string_args_escaped t ss r h⟩
+  | .error e => .error e
+
 /-- `striptags`: the three passes, and no complete tag survives the first. -/
 def striptags (m : Markup) :
     {s : String // s = LeanMarkupsafe.unescape (String.ofList (collapseSpaces (removeTags m.str.toList)))

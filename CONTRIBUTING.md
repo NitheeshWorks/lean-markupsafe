@@ -57,6 +57,17 @@ be a Hoare triple over a heap.
   `concat_string_closed`, `join_closed`, `join_markup_closed`,
   `format_closed`, `mod_closed`, `argsSafe_proof`.
 * `VerifiedStripTags`: `striptags_no_tags`, `removeTags_no_lt`, `striptags_eq`.
+* `VerifiedProvenance`: `format_provenance`, `mod_provenance` (for any
+  template, trusted HTML included: the output is the template's segments with
+  literals copied, `{{`/`}}`/`%%` unquoted and each field replaced by an
+  argument rendering), `string_arg_rendering`, `format_string_args_escaped`
+  and `mod_string_args_escaped` (string arguments appear as `escape s`).
+
+**What a `Markup` value means.** `Markup` is trusted, unchecked HTML, as
+upstream: `Markup.mk` and `HasHtml` renderings are not checked. Only
+`Escaped` (and the `API.*` refinements) carry a proof. `format_closed` and
+`mod_closed` cover templates that are themselves escaped text; trusted HTML
+templates are covered by the provenance theorems.
 
 `IsEscaped s` (`Specifications/Basic.lean`) says `s` is a sequence of
 characters other than `& < > " '` and the five references `escape` emits.
@@ -71,8 +82,11 @@ Listed here with the reason, and in `docs/traceability.toml` with
   through the 2231-entry HTML5 table, the longest-prefix fallback and the
   WHATWG invalid-reference tables. The proofs only need the five references
   `escape` emits, which take a fast path in `lookupNamed`; the conformance
-  suite checks the fast path agrees with the table, and the numeric and
-  fallback behaviour against cases taken from Python's `html.unescape`.
+  suite checks the fast path agrees with the table, and
+  `tests/fixtures/unescape.txt` (10909 cases generated from CPython's
+  `html.unescape` by `scripts/gen-unescape-fixture.py`: every HTML5 name in
+  three contexts, numeric references around every boundary, random
+  reference-heavy strings) must match exactly.
 * **Whitespace collapse in `striptags`** (`striptags.whitespace`): that the
   output has no leading, trailing or doubled space and keeps every
   non-space character in order is property-tested. The catalogue's
@@ -94,6 +108,17 @@ Listed here with the reason, and in `docs/traceability.toml` with
 * **Python object model.** Proxy objects, `str` subclasses and exceptions
   raised by `__html__` have no Lean analogue; `escape(None)` is `"None"`
   upstream, here `Option` goes through `escapeSilent`.
+* **`%d` of text** parses it as Python `int()` does (whitespace, sign,
+  ASCII digits, single underscores); non-ASCII digits are rejected. `%r`,
+  `%a`, `%c` and the float conversions are not supported.
+* **Concatenation is wider than upstream.** `Markup.concat m x` accepts any
+  `ToMarkup` value, including numbers through `toString`, where upstream
+  `Markup + 1` raises `TypeError`. The result is still escaped.
+* **Huge numeric references.** A decimal reference over 4300 digits decodes
+  to U+FFFD like any out-of-range value; CPython raises `ValueError` from its
+  integer string conversion limit.
+* **Error texts.** `FormatError.mixedNumbering` gives one message for both
+  directions of mixing `{}` and `{0}`; upstream words the two differently.
 * **`str` method wrappers** other than `split` and `*` (`splitlines`,
   `partition`, `strip`, `replace`, ...) are not ported; use `String`
   functions on `m.str` and `Markup.mk`.

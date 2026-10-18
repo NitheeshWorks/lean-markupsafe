@@ -64,12 +64,20 @@ theorem join_closed : Spec.joinClosed := by
 
 /-! ## Safe arguments -/
 
+theorem percentIntOfText_ok {s : String} {m : Markup} (h : percentIntOfText s = .ok m) :
+    ∃ i : Int, m = escape (toString i) := by
+  unfold percentIntOfText at h
+  split at h
+  · cases h; exact ⟨_, rfl⟩
+  · cases h
+
 theorem argsSafe_proof : Spec.argsSafe := by
   refine ⟨?_, ?_, ?_, ?_⟩
   · intro s c m h
     cases c with
     | percentStr => cases h; exact escape_sound s
-    | percentInt => cases h
+    | percentInt =>
+      obtain ⟨i, rfl⟩ := percentIntOfText_ok h; exact escape_sound _
     | brace spec =>
       simp only [FormatArg.ofString] at h
       split at h
@@ -96,7 +104,8 @@ theorem argsSafe_proof : Spec.argsSafe := by
   · intro mk hmk c m h
     cases c with
     | percentStr => cases h; exact hmk
-    | percentInt => cases h
+    | percentInt =>
+      obtain ⟨i, rfl⟩ := percentIntOfText_ok h; exact escape_sound _
     | brace spec =>
       simp only [FormatArg.ofMarkup] at h
       split at h
