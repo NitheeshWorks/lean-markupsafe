@@ -7,3 +7,9 @@ documentation are used as the behavioural specification, and each
 conformance case in tests/Conformance.lean names the upstream test it
 re-expresses. docs/traceability.toml records the upstream commit this port
 was read against.
+
+LeanMarkupsafe/RepoImpl/Entities.lean is generated data: the WHATWG HTML
+named character reference table (https://html.spec.whatwg.org/entities.json),
+as distributed in CPython's html.entities.html5, which upstream's
+Markup.unescape uses through html.unescape. The invalid numeric reference
+tables in RepoImpl/Unescape.lean come from the same WHATWG specification.

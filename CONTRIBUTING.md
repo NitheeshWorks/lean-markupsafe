@@ -45,10 +45,58 @@ be a Hoare triple over a heap.
   `Quot.sound`, `Classical.choice`), `lake exe props`, `lake exe conformance`,
   the traceability check.
 
+### What is proved
+
+`Proofs/Verified.lean` bundles every headline property:
+
+* `VerifiedEscape`: `escape_sound` (output is `IsEscaped`), `unescape_escape`,
+  `escape_unescape` (on escaped text), `isEscaped_iff` (escaped text is the
+  image of `escape`), `escape_injective`, `escape_markup_id`, `escape_length`
+  (exact formula), `softStr_markup`, `escapeSilent_spec`.
+* `VerifiedClosure`: `concat_markup_markup`, `concat_escapes`,
+  `concat_string_closed`, `join_closed`, `join_markup_closed`,
+  `format_closed`, `mod_closed`, `argsSafe_proof`.
+* `VerifiedStripTags`: `striptags_no_tags`, `removeTags_no_lt`, `striptags_eq`.
+
+`IsEscaped s` (`Specifications/Basic.lean`) says `s` is a sequence of
+characters other than `& < > " '` and the five references `escape` emits.
+`IsEscaped` is decidable (through `esc_iff_roundtrip`).
+
 ### Tested, not proved
 
 Listed here with the reason, and in `docs/traceability.toml` with
-`status = "tested"`. (Nothing yet.)
+`status = "tested"`.
+
+* **`unescape` on arbitrary references** (`unescape.html5`). Decoding goes
+  through the 2231-entry HTML5 table, the longest-prefix fallback and the
+  WHATWG invalid-reference tables. The proofs only need the five references
+  `escape` emits, which take a fast path in `lookupNamed`; the conformance
+  suite checks the fast path agrees with the table, and the numeric and
+  fallback behaviour against cases taken from Python's `html.unescape`.
+* **Whitespace collapse in `striptags`** (`striptags.whitespace`): that the
+  output has no leading, trailing or doubled space and keeps every
+  non-space character in order is property-tested. The catalogue's
+  `striptags_no_tags` is about tag removal and is proved.
+
+### Deviations from upstream
+
+* **`Markup` is a trusted wrapper, not the refinement.** Upstream
+  `Markup("<em>")` marks arbitrary HTML safe, and rendered templates are
+  such values, so `Markup` is a structure and the invariant is the subtype
+  `Escaped := {m : Markup // IsEscaped m.str}`.
+* **Format syntax.** `Markup.format` supports literal text, `{{`/`}}` and
+  fields `{}`, `{0}`, `{name}` with an optional `:spec` handed to the
+  argument (`HasHtmlFormat` sees any spec). `Markup.mod` supports `%%`,
+  `%s`, `%d`, `%i` and `%(key)s`. Attribute/index access, `!r`
+  conversions, nested specs, Python's string/number format specs, `%`
+  flags/widths/precisions and floats return `FormatError.unsupported`.
+  A `%(key)` key ends at the first `)` (Python counts nested parentheses).
+* **Python object model.** Proxy objects, `str` subclasses and exceptions
+  raised by `__html__` have no Lean analogue; `escape(None)` is `"None"`
+  upstream, here `Option` goes through `escapeSilent`.
+* **`str` method wrappers** other than `split` and `*` (`splitlines`,
+  `partition`, `strip`, `replace`, ...) are not ported; use `String`
+  functions on `m.str` and `Markup.mk`.
 
 ## Tests
 

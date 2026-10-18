@@ -31,10 +31,27 @@ scripts/check.sh      # the whole CI gate, locally
 
 Toolchain: `leanprover/lean4:v4.35.0` (pinned in `lean-toolchain`; `elan` installs it).
 
+## Using it
+
+```lean
+import LeanMarkupsafe
+open LeanMarkupsafe
+
+#eval (escape "<b>&</b>").str                     -- "&lt;b&gt;&amp;&lt;/b&gt;"
+#eval (Markup.mk "<em>" ++ "<x>" ++ Markup.mk "</em>").str   -- "<em>&lt;x&gt;</em>"
+#eval (Markup.mk "<p>{}</p>").format [.ofString "a < b"]     -- ok "<p>a &lt; b</p>"
+#eval (Markup.mk "Main &raquo;\t<em>About</em>").striptags  -- "Main » About"
+```
+
+A type opts into safe rendering with `instance : HasHtml T := ⟨fun t => ...⟩`
+(upstream `__html__`); `Markup.escape`, concatenation, `join` and `format`
+then use that rendering instead of escaping. `LeanMarkupsafe.API` has the
+same operations with their guarantees in the types (`Escaped`, `SafeArg`).
+
 ## Status
 
-Milestone 0: skeleton, CI gate, cross-repo pins. See the stack plan in
-lean-fastapi for the milestones that fill this in.
+Milestone 9: the MarkupSafe surface lean-jinja2 needs, with the theorem
+catalogue proved (see CONTRIBUTING.md).
 
 ## License
 

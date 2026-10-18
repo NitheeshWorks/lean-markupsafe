@@ -36,7 +36,7 @@ structure VerifiedEscape where
   /-- `escapeSilent_spec`. -/
   escapeSilent : Spec.escapeSilentSpec
 
-def theVerifiedEscape : VerifiedEscape where
+theorem theVerifiedEscape : VerifiedEscape where
   escapeSound := escape_sound
   unescapeEscape := unescape_escape
   escapeUnescape := escape_unescape
@@ -67,7 +67,7 @@ structure VerifiedClosure where
   /-- `argsSafe_proof`. -/
   argsSafe : Spec.argsSafe
 
-def theVerifiedClosure : VerifiedClosure where
+theorem theVerifiedClosure : VerifiedClosure where
   appendClosed := concat_markup_markup
   concatEscapes := concat_escapes
   concatStringClosed := concat_string_closed
@@ -86,7 +86,7 @@ structure VerifiedStripTags where
   /-- `striptags_eq`. -/
   passes : Spec.striptagsEq
 
-def theVerifiedStripTags : VerifiedStripTags where
+theorem theVerifiedStripTags : VerifiedStripTags where
   noTags := striptags_no_tags
   noLt := removeTags_no_lt
   passes := striptags_eq

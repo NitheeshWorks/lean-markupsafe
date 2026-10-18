@@ -24,3 +24,194 @@ upstream_license = "BSD-3-Clause"
 # realises = ["LeanMarkupsafe.Foo.bar"]
 # theorem = ["LeanMarkupsafe.Foo.bar_spec"]
 # test = ["tests/Conformance.lean::name"]
+
+[[requirement]]
+id = "escape.chars"
+upstream = "tests/test_escape.py::test_escape"
+title = "escape maps & < > \" ' to &amp; &lt; &gt; &#34; &#39; and nothing else"
+status = "implemented"
+realises = ["LeanMarkupsafe.escape", "LeanMarkupsafe.escapeChar", "LeanMarkupsafe.API.escape"]
+theorem = ["LeanMarkupsafe.escape_sound", "LeanMarkupsafe.escapeChar_eq", "LeanMarkupsafe.escape_length"]
+test = ["tests/Conformance.lean::escape", "tests/Props.lean::escape agrees with upstream's chained str.replace"]
+
+[[requirement]]
+id = "escape.sound"
+upstream = "src/markupsafe/__init__.py::escape"
+title = "escape output is escaped text (IsEscaped), the refinement on Markup"
+status = "implemented"
+realises = ["LeanMarkupsafe.IsEscaped", "LeanMarkupsafe.Escaped", "LeanMarkupsafe.Esc"]
+theorem = ["LeanMarkupsafe.escape_sound", "LeanMarkupsafe.isEscaped_iff", "LeanMarkupsafe.esc_iff_roundtrip"]
+test = ["tests/Props.lean::IsEscaped decides true on escape output"]
+
+[[requirement]]
+id = "escape.length"
+upstream = "src/markupsafe/_native.py::_escape_inner"
+title = "exact length of escape output"
+status = "implemented"
+realises = ["LeanMarkupsafe.escapedLength"]
+theorem = ["LeanMarkupsafe.escape_length", "LeanMarkupsafe.escapeList_length"]
+test = ["tests/pbt/Pbt.lean"]
+
+[[requirement]]
+id = "escape.markup-id"
+upstream = "tests/test_markupsafe.py::test_escape_return_type"
+title = "escaping a Markup (or any __html__ object) returns its HTML unchanged"
+status = "implemented"
+realises = ["LeanMarkupsafe.Markup.escape", "LeanMarkupsafe.ToMarkup", "LeanMarkupsafe.HasHtml"]
+theorem = ["LeanMarkupsafe.escape_markup_id", "LeanMarkupsafe.escape_string"]
+test = ["tests/Conformance.lean::escape_return_type", "tests/Conformance.lean::type_behavior"]
+
+[[requirement]]
+id = "html-protocol"
+upstream = "tests/test_markupsafe.py::test_html_interop"
+title = "__html__ / __html_format__ protocol as the HasHtml / HasHtmlFormat classes"
+status = "implemented"
+realises = ["LeanMarkupsafe.HasHtml", "LeanMarkupsafe.HasHtmlFormat", "LeanMarkupsafe.Markup.ofHtml", "LeanMarkupsafe.FormatArg.ofHtml", "LeanMarkupsafe.FormatArg.ofHtmlFormat"]
+test = ["tests/Conformance.lean::html_interop", "tests/Conformance.lean::custom_formatting", "tests/Conformance.lean::complex_custom_formatting"]
+
+[[requirement]]
+id = "unescape.roundtrip"
+upstream = "tests/test_markupsafe.py::test_unescape"
+title = "unescape (escape s) = s, and escape (unescape s) = s on escaped text"
+status = "implemented"
+realises = ["LeanMarkupsafe.unescape", "LeanMarkupsafe.Markup.unescape", "LeanMarkupsafe.API.unescape"]
+theorem = ["LeanMarkupsafe.unescape_escape", "LeanMarkupsafe.escape_unescape", "LeanMarkupsafe.escape_injective"]
+test = ["tests/Conformance.lean::unescape", "tests/Props.lean::unescape (escape s) = s (smoke test of unescape_escape)"]
+
+[[requirement]]
+id = "unescape.html5"
+upstream = "src/markupsafe/__init__.py::Markup.unescape"
+title = "unescape follows html.unescape: HTML5 named table, longest-prefix fallback, decimal/hex references, WHATWG invalid-reference remapping"
+status = "tested"
+realises = ["LeanMarkupsafe.decodeRef", "LeanMarkupsafe.numericRef", "LeanMarkupsafe.namedRef", "LeanMarkupsafe.entityMap", "LeanMarkupsafe.lookupNamed"]
+theorem = ["LeanMarkupsafe.decodeRef_length"]
+test = ["tests/Conformance.lean::numeric_references", "tests/Conformance.lean::named_prefix_fallback", "tests/Conformance.lean::entity_table_size", "tests/Conformance.lean::entity_fast_path_agrees", "tests/Props.lean::decimal and hex numeric references agree"]
+note = "Behaviour on arbitrary references is a table lookup against 2231 entries; agreement with the table is tested, not proved. Termination and the round trips are proved."
+
+[[requirement]]
+id = "concat"
+upstream = "tests/test_markupsafe.py::test_adding"
+title = "Markup + str escapes the str side (both __add__ and __radd__); invariant closed under concatenation"
+status = "implemented"
+realises = ["LeanMarkupsafe.Markup.append", "LeanMarkupsafe.Markup.concat", "LeanMarkupsafe.Markup.rconcat", "LeanMarkupsafe.API.append", "LeanMarkupsafe.API.appendString"]
+theorem = ["LeanMarkupsafe.concat_markup_markup", "LeanMarkupsafe.concat_escapes", "LeanMarkupsafe.concat_string_closed"]
+test = ["tests/Conformance.lean::adding", "tests/Conformance.lean::markup_docstring"]
+
+[[requirement]]
+id = "join"
+upstream = "src/markupsafe/__init__.py::Markup.join"
+title = "join escapes non-Markup items; invariant closed under join"
+status = "implemented"
+realises = ["LeanMarkupsafe.Markup.join", "LeanMarkupsafe.Markup.joinMarkup", "LeanMarkupsafe.API.join", "LeanMarkupsafe.API.joinEscaped"]
+theorem = ["LeanMarkupsafe.join_closed", "LeanMarkupsafe.join_markup_closed"]
+test = ["tests/Props.lean::join of strings is escaped"]
+
+[[requirement]]
+id = "format"
+upstream = "tests/test_markupsafe.py::test_format"
+title = "Markup.format / format_map escape every argument; invariant closed under format"
+status = "implemented"
+realises = ["LeanMarkupsafe.Markup.format", "LeanMarkupsafe.Markup.formatMap", "LeanMarkupsafe.formatList", "LeanMarkupsafe.API.format"]
+theorem = ["LeanMarkupsafe.format_closed", "LeanMarkupsafe.argsSafe_proof"]
+test = ["tests/Conformance.lean::format[named]", "tests/Conformance.lean::format_map", "tests/Conformance.lean::formatting_empty", "tests/Conformance.lean::formatting_with_objects"]
+
+[[requirement]]
+id = "mod"
+upstream = "tests/test_markupsafe.py::test_tuple_interpol"
+title = "Markup % args escapes every argument (tuple, single value, mapping); arity errors; invariant closed under %"
+status = "implemented"
+realises = ["LeanMarkupsafe.Markup.mod", "LeanMarkupsafe.percentList", "LeanMarkupsafe.API.modTuple", "LeanMarkupsafe.API.modMapping"]
+theorem = ["LeanMarkupsafe.mod_closed"]
+test = ["tests/Conformance.lean::tuple_interpol", "tests/Conformance.lean::dict_interpol", "tests/Conformance.lean::missing_interpol", "tests/Conformance.lean::interpolation"]
+
+[[requirement]]
+id = "format.deviation.access"
+upstream = "tests/test_markupsafe.py::test_format"
+title = "attribute/index access in format fields ({0[1][bar]}), !r conversions and nested specs"
+status = "deviation"
+realises = ["LeanMarkupsafe.FormatError.unsupported"]
+test = ["tests/Conformance.lean::format[index access rejected: deviation]"]
+note = "Lean values have no dynamic indexing; such fields return FormatError.unsupported. Callers pass the indexed value directly."
+
+[[requirement]]
+id = "format.deviation.specs"
+upstream = "tests/test_markupsafe.py::test_string_interpolation"
+title = "Python format specs for strings/numbers ({:>5}, %.2f, %5s, floats)"
+status = "deviation"
+realises = ["LeanMarkupsafe.percentConv", "LeanMarkupsafe.FormatArg.ofString", "LeanMarkupsafe.FormatArg.ofInt"]
+test = ["tests/Conformance.lean::interpolation[%i] (integer argument)"]
+note = "Only %s, %d, %i, %% and bare {} fields are supported; flags, widths, precisions and float conversions return FormatError.unsupported. Upstream's %i/%.2f cases use a float; here %i takes an Int. A HasHtmlFormat instance receives any spec."
+
+[[requirement]]
+id = "striptags"
+upstream = "tests/test_markupsafe.py::test_escaping"
+title = "striptags removes tags and comments, collapses whitespace, unescapes; no complete tag survives"
+status = "implemented"
+realises = ["LeanMarkupsafe.Markup.striptags", "LeanMarkupsafe.removeTags", "LeanMarkupsafe.collapseSpaces", "LeanMarkupsafe.API.striptags", "LeanMarkupsafe.NoCompleteTag"]
+theorem = ["LeanMarkupsafe.striptags_no_tags", "LeanMarkupsafe.removeTags_no_lt", "LeanMarkupsafe.striptags_eq"]
+test = ["tests/Conformance.lean::escaping", "tests/Conformance.lean::striptags_docstring", "tests/Props.lean::collapseSpaces output is normalised"]
+
+[[requirement]]
+id = "striptags.whitespace"
+upstream = "src/markupsafe/__init__.py::Markup.striptags"
+title = "whitespace collapse uses Python str.split() (Unicode whitespace)"
+status = "tested"
+realises = ["LeanMarkupsafe.isPySpace", "LeanMarkupsafe.words"]
+test = ["tests/Props.lean::collapseSpaces output is normalised", "tests/Props.lean::collapseSpaces keeps the non-space characters in order"]
+note = "Normalisation of the collapsed text is property-tested; the theorem catalogue covers tag removal only."
+
+[[requirement]]
+id = "escape-silent"
+upstream = "tests/test_markupsafe.py::test_escape_silent"
+title = "escape_silent maps None to empty Markup"
+status = "implemented"
+realises = ["LeanMarkupsafe.escapeSilent"]
+theorem = ["LeanMarkupsafe.escapeSilent_spec"]
+test = ["tests/Conformance.lean::escape_silent"]
+
+[[requirement]]
+id = "soft-str"
+upstream = "tests/test_markupsafe.py::test_soft_str"
+title = "soft_str keeps Markup as Markup, converts anything else to text"
+status = "implemented"
+realises = ["LeanMarkupsafe.softStr", "LeanMarkupsafe.SoftString", "LeanMarkupsafe.ToSoftString"]
+theorem = ["LeanMarkupsafe.softStr_markup"]
+test = ["tests/Conformance.lean::soft_str", "tests/Conformance.lean::soft_str_docstring"]
+
+[[requirement]]
+id = "markup.trusted"
+upstream = "src/markupsafe/__init__.py::Markup.__new__"
+title = "Markup(s) marks a string safe without escaping; Markup is a trusted wrapper, the IsEscaped refinement is the Escaped subtype"
+status = "deviation"
+realises = ["LeanMarkupsafe.Markup", "LeanMarkupsafe.Markup.markSafe", "LeanMarkupsafe.Escaped"]
+test = ["tests/Conformance.lean::html_interop"]
+note = "The plan sketched Markup := {s // IsEscaped s}; upstream Markup holds trusted HTML such as '<em>', which templates need, so Markup is a structure and Escaped := {m : Markup // IsEscaped m.str} carries the invariant."
+
+[[requirement]]
+id = "split-mul"
+upstream = "tests/test_markupsafe.py::test_splitting"
+title = "Markup.split (whitespace) and Markup * n"
+status = "implemented"
+realises = ["LeanMarkupsafe.Markup.split", "LeanMarkupsafe.Markup.times"]
+test = ["tests/Conformance.lean::splitting[split]", "tests/Conformance.lean::mul"]
+
+[[requirement]]
+id = "str-methods"
+upstream = "src/markupsafe/__init__.py::Markup (str method wrappers)"
+title = "splitlines, rsplit with sep, partition, strip, ljust, replace and the other str wrappers"
+status = "excluded"
+note = "Thin wrappers that re-mark str results as Markup; not part of the surface lean-jinja2 needs. Callers use String functions on m.str and Markup.mk."
+
+[[requirement]]
+id = "python-object-model"
+upstream = "tests/test_escape.py::test_proxy"
+title = "proxy objects, str subclasses, exceptions from __html__ (test_proxy, test_subclass, test_exception_custom_html)"
+status = "excluded"
+note = "Python object-model behaviour with no Lean analogue: Lean types are nominal and HasHtml.html is a total function."
+
+[[requirement]]
+id = "speedups"
+upstream = "tests/test_leak.py::test_markup_leaks"
+title = "C speedups, reference leaks, extension init (test_leak, test_ext_init)"
+status = "excluded"
+note = "Implementation details of the CPython extension."
